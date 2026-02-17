@@ -171,10 +171,10 @@ const Inventory: React.FC<InventoryProps> = ({ user }) => {
           <table className="w-full text-left">
             <thead>
               <tr className="bg-slate-50/50 border-b border-slate-100">
-                <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Detalle Producto</th>
-                <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">P.V.P</th>
-                <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Stock</th>
-                <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Acciones</th>
+                <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Producto</th>
+                <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">P.V.P / Stock</th>
+                <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Descripción Detallada</th>
+                <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
@@ -184,25 +184,31 @@ const Inventory: React.FC<InventoryProps> = ({ user }) => {
                 <tr><td colSpan={4} className="px-8 py-24 text-center text-slate-300 font-bold uppercase tracking-widest text-xs">No se encontraron productos</td></tr>
               ) : filteredProducts.map(product => (
                 <tr key={product.id} className="hover:bg-slate-50/30 transition-colors">
-                  <td className="px-8 py-6 max-w-xs">
+                  <td className="px-8 py-6 min-w-[200px]">
                     <div className="font-black text-slate-900 uppercase truncate">{product.nombre}</div>
-                    <div className="flex items-center gap-2 mt-1 mb-1">
+                    <div className="flex items-center gap-2 mt-1">
                       <span className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">{product.codigo_barras}</span>
                       {product.ubicacion && (
                         <span className="text-[8px] bg-indigo-50 text-indigo-500 font-black px-1.5 py-0.5 rounded-md uppercase">📍 {product.ubicacion}</span>
                       )}
                     </div>
-                    {product.descripcion && (
-                      <p className="text-[10px] text-slate-400 italic font-medium line-clamp-1 leading-tight">
+                  </td>
+                  <td className="px-8 py-6 whitespace-nowrap">
+                    <div className="font-black text-indigo-600 text-sm">${Number(product.precio).toLocaleString()}</div>
+                    <div className="mt-1">
+                      <span className={`text-[9px] font-black uppercase ${product.stock < 10 ? 'text-rose-500' : 'text-emerald-500'}`}>
+                        {product.stock} Unidades
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-8 py-6 min-w-[250px] max-w-md">
+                    {product.descripcion ? (
+                      <p className="text-[10px] text-slate-500 italic font-medium leading-relaxed line-clamp-2">
                         {product.descripcion}
                       </p>
+                    ) : (
+                      <span className="text-[9px] text-slate-300 font-bold uppercase tracking-widest">Sin descripción</span>
                     )}
-                  </td>
-                  <td className="px-8 py-6 font-black text-indigo-600">${Number(product.precio).toLocaleString()}</td>
-                  <td className="px-8 py-6">
-                    <span className={`px-3 py-1 rounded-xl text-[10px] font-black uppercase ${product.stock < 10 ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'}`}>
-                      {product.stock} Unid
-                    </span>
                   </td>
                   <td className="px-8 py-6">
                     <div className="flex items-center gap-2">
