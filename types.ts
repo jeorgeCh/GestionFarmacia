@@ -53,6 +53,7 @@ export interface Venta {
   producto_id: number;
   cantidad: number;
   total: number;
+  metodo_pago: 'efectivo' | 'transferencia';
   fecha: string;
   productos?: Producto;
   usuarios?: Usuario;

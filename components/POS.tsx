@@ -12,6 +12,7 @@ interface ReceiptData {
   total: number;
   received: number;
   change: number;
+  paymentMethod: 'efectivo' | 'transferencia';
   date: Date;
   invoiceNumber: string;
 }
@@ -21,6 +22,7 @@ const POS: React.FC<POSProps> = ({ user }) => {
   const [cart, setCart] = useState<{product: Producto, cantidad: number}[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [cashReceived, setCashReceived] = useState<number | string>('');
+  const [paymentMethod, setPaymentMethod] = useState<'efectivo' | 'transferencia'>('efectivo');
   const [processing, setProcessing] = useState(false);
   const [success, setSuccess] = useState(false);
   const [showReceipt, setShowReceipt] = useState(false);
@@ -115,12 +117,12 @@ const POS: React.FC<POSProps> = ({ user }) => {
   };
 
   const totalAmount = cart.reduce((sum, item) => sum + (getFinalPrice(item.product) * item.cantidad), 0);
-  const numericReceived = typeof cashReceived === 'number' ? cashReceived : parseFloat(cashReceived as string) || 0;
+  const numericReceived = paymentMethod === 'transferencia' ? totalAmount : (typeof cashReceived === 'number' ? cashReceived : parseFloat(cashReceived as string) || 0);
   const changeDue = numericReceived > 0 ? numericReceived - totalAmount : 0;
 
   const handleCheckout = async () => {
     if (cart.length === 0) return;
-    if (numericReceived < totalAmount) {
+    if (paymentMethod === 'efectivo' && numericReceived < totalAmount) {
       alert("El monto recibido es menor al total de la venta.");
       return;
     }
@@ -139,7 +141,8 @@ const POS: React.FC<POSProps> = ({ user }) => {
           usuario_id: user.id,
           producto_id: item.product.id,
           cantidad: item.cantidad,
-          total: item.finalPrice * item.cantidad
+          total: item.finalPrice * item.cantidad,
+          metodo_pago: paymentMethod
         });
       }
 
@@ -148,6 +151,7 @@ const POS: React.FC<POSProps> = ({ user }) => {
         total: totalAmount,
         received: numericReceived,
         change: changeDue,
+        paymentMethod: paymentMethod,
         date: new Date(),
         invoiceNumber: invoiceID
       });
@@ -300,24 +304,52 @@ const POS: React.FC<POSProps> = ({ user }) => {
         </div>
 
         <div className="p-4 lg:p-6 bg-slate-50/30 border-t border-slate-100 space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">Recibido ($)</label>
-              <input
-                type="number"
-                className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl outline-none font-black text-sm text-slate-700 focus:border-emerald-500 transition-all"
-                placeholder="0.00"
-                value={cashReceived}
-                onChange={(e) => setCashReceived(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">Cambio</label>
-              <div className={`w-full px-4 py-2.5 rounded-xl font-black text-sm border flex items-center justify-end ${changeDue >= 0 ? 'bg-emerald-50 border-emerald-100 text-emerald-600' : 'bg-rose-50 border-rose-100 text-rose-600'}`}>
-                ${Math.round(changeDue).toLocaleString()}
-              </div>
+          <div className="space-y-3">
+            <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1 block">Método de Pago</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button 
+                onClick={() => setPaymentMethod('efectivo')}
+                className={`py-3 rounded-xl border font-black text-[10px] uppercase transition-all flex items-center justify-center gap-2 ${paymentMethod === 'efectivo' ? 'bg-slate-900 border-slate-900 text-white shadow-lg' : 'bg-white border-slate-200 text-slate-400 hover:bg-slate-50'}`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+                Efectivo
+              </button>
+              <button 
+                onClick={() => { setPaymentMethod('transferencia'); setCashReceived(''); }}
+                className={`py-3 rounded-xl border font-black text-[10px] uppercase transition-all flex items-center justify-center gap-2 ${paymentMethod === 'transferencia' ? 'bg-slate-900 border-slate-900 text-white shadow-lg' : 'bg-white border-slate-200 text-slate-400 hover:bg-slate-50'}`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
+                Transferencia
+              </button>
             </div>
           </div>
+
+          {paymentMethod === 'efectivo' && (
+            <div className="grid grid-cols-2 gap-3 animate-in fade-in slide-in-from-top-2">
+              <div className="space-y-1">
+                <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">Recibido ($)</label>
+                <input
+                  type="number"
+                  className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl outline-none font-black text-sm text-slate-700 focus:border-emerald-500 transition-all"
+                  placeholder="0.00"
+                  value={cashReceived}
+                  onChange={(e) => setCashReceived(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">Cambio</label>
+                <div className={`w-full px-4 py-2.5 rounded-xl font-black text-sm border flex items-center justify-end ${changeDue >= 0 ? 'bg-emerald-50 border-emerald-100 text-emerald-600' : 'bg-rose-50 border-rose-100 text-rose-600'}`}>
+                  ${Math.round(changeDue).toLocaleString()}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {paymentMethod === 'transferencia' && (
+            <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 animate-in fade-in slide-in-from-top-2">
+              <p className="text-[9px] font-black text-indigo-600 uppercase tracking-widest text-center">Confirmar recepción de transferencia bancaria</p>
+            </div>
+          )}
 
           <div className="flex justify-between items-center py-2">
             <span className="text-slate-900 font-black text-[10px] lg:text-xs uppercase tracking-tight">TOTAL A COBRAR</span>
@@ -325,11 +357,11 @@ const POS: React.FC<POSProps> = ({ user }) => {
           </div>
           
           <button 
-            disabled={cart.length === 0 || processing || (numericReceived < totalAmount && totalAmount > 0)} 
+            disabled={cart.length === 0 || processing || (paymentMethod === 'efectivo' && numericReceived < totalAmount && totalAmount > 0)} 
             onClick={handleCheckout} 
-            className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 text-white rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-lg flex items-center justify-center gap-2 transition-all active:scale-95"
+            className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 text-white rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-lg flex items-center justify-center gap-2 transition-all active:scale-95"
           >
-            {processing ? 'Procesando...' : 'CERRAR VENTA'}
+            {processing ? 'Procesando...' : `CERRAR VENTA (${paymentMethod === 'efectivo' ? 'EFECTIVO' : 'TRANSF.'})`}
           </button>
         </div>
       </div>
@@ -339,7 +371,10 @@ const POS: React.FC<POSProps> = ({ user }) => {
           <div className="bg-white w-full max-w-md rounded-[3rem] shadow-2xl overflow-hidden p-8 lg:p-10">
             <div className="text-center mb-8">
               <h2 className="text-2xl font-black uppercase tracking-tight text-slate-900">Venta Exitosa</h2>
-              <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1">Comprobante N° {receipt.invoiceNumber}</p>
+              <div className="inline-flex px-3 py-1 bg-slate-100 rounded-lg mt-2">
+                <p className="text-[8px] text-slate-400 font-black uppercase tracking-widest">Pago via: {receipt.paymentMethod.toUpperCase()}</p>
+              </div>
+              <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-2">Comprobante N° {receipt.invoiceNumber}</p>
             </div>
             <div className="space-y-2 mb-8 border-y border-slate-50 py-6 max-h-[40vh] overflow-y-auto custom-scrollbar">
               {receipt.items.map((item, idx) => (
@@ -349,9 +384,23 @@ const POS: React.FC<POSProps> = ({ user }) => {
                 </div>
               ))}
             </div>
-            <div className="flex justify-between items-center mb-10">
-              <span className="font-black text-slate-400 uppercase text-[9px] tracking-[0.2em]">Total Cobrado</span>
-              <span className="text-2xl font-black text-emerald-600">${Math.round(receipt.total).toLocaleString()}</span>
+            <div className="space-y-3 mb-10">
+              <div className="flex justify-between items-center">
+                <span className="font-black text-slate-400 uppercase text-[9px] tracking-[0.2em]">Total</span>
+                <span className="text-2xl font-black text-emerald-600">${Math.round(receipt.total).toLocaleString()}</span>
+              </div>
+              {receipt.paymentMethod === 'efectivo' && (
+                <div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl">
+                  <div className="text-left">
+                    <p className="text-[8px] font-black text-slate-400 uppercase">Recibido</p>
+                    <p className="font-black text-slate-900 text-sm">${Math.round(receipt.received).toLocaleString()}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[8px] font-black text-slate-400 uppercase">Cambio</p>
+                    <p className="font-black text-emerald-600 text-sm">${Math.round(receipt.change).toLocaleString()}</p>
+                  </div>
+                </div>
+              )}
             </div>
             <button onClick={closeReceipt} className="w-full py-5 bg-slate-900 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl active:scale-95 transition-all">Nueva Venta</button>
           </div>
