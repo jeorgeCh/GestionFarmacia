@@ -137,7 +137,8 @@ const Inventory: React.FC<InventoryProps> = ({ user }) => {
   const filteredProducts = products.filter(p => 
     p.nombre.toLowerCase().includes(searchTerm.toLowerCase()) || 
     p.codigo_barras.includes(searchTerm) ||
-    (p.ubicacion && p.ubicacion.toLowerCase().includes(searchTerm.toLowerCase()))
+    (p.ubicacion && p.ubicacion.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (p.descripcion && p.descripcion.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   return (
@@ -147,7 +148,7 @@ const Inventory: React.FC<InventoryProps> = ({ user }) => {
           <input
             type="text"
             className="w-full pl-12 pr-6 py-4 bg-white border border-slate-100 rounded-2xl focus:ring-4 focus:ring-emerald-500/5 outline-none font-medium transition-all"
-            placeholder="Buscar por nombre, código o ubicación..."
+            placeholder="Buscar por nombre, código, ubicación o descripción..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
@@ -170,7 +171,7 @@ const Inventory: React.FC<InventoryProps> = ({ user }) => {
           <table className="w-full text-left">
             <thead>
               <tr className="bg-slate-50/50 border-b border-slate-100">
-                <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Producto / Ubicación</th>
+                <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Detalle Producto</th>
                 <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">P.V.P</th>
                 <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Stock</th>
                 <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Acciones</th>
@@ -183,14 +184,19 @@ const Inventory: React.FC<InventoryProps> = ({ user }) => {
                 <tr><td colSpan={4} className="px-8 py-24 text-center text-slate-300 font-bold uppercase tracking-widest text-xs">No se encontraron productos</td></tr>
               ) : filteredProducts.map(product => (
                 <tr key={product.id} className="hover:bg-slate-50/30 transition-colors">
-                  <td className="px-8 py-6">
-                    <div className="font-black text-slate-900 uppercase">{product.nombre}</div>
-                    <div className="flex items-center gap-2 mt-1">
+                  <td className="px-8 py-6 max-w-xs">
+                    <div className="font-black text-slate-900 uppercase truncate">{product.nombre}</div>
+                    <div className="flex items-center gap-2 mt-1 mb-1">
                       <span className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">{product.codigo_barras}</span>
                       {product.ubicacion && (
                         <span className="text-[8px] bg-indigo-50 text-indigo-500 font-black px-1.5 py-0.5 rounded-md uppercase">📍 {product.ubicacion}</span>
                       )}
                     </div>
+                    {product.descripcion && (
+                      <p className="text-[10px] text-slate-400 italic font-medium line-clamp-1 leading-tight">
+                        {product.descripcion}
+                      </p>
+                    )}
                   </td>
                   <td className="px-8 py-6 font-black text-indigo-600">${Number(product.precio).toLocaleString()}</td>
                   <td className="px-8 py-6">

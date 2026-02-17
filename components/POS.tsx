@@ -174,7 +174,8 @@ const POS: React.FC<POSProps> = ({ user }) => {
   const filteredProducts = products.filter(p => 
     p.nombre.toLowerCase().includes(searchTerm.toLowerCase()) || 
     p.codigo_barras.includes(searchTerm) ||
-    (p.ubicacion && p.ubicacion.toLowerCase().includes(searchTerm.toLowerCase()))
+    (p.ubicacion && p.ubicacion.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (p.descripcion && p.descripcion.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   return (
@@ -186,7 +187,7 @@ const POS: React.FC<POSProps> = ({ user }) => {
             ref={searchInputRef}
             type="text"
             className="w-full pl-12 pr-6 py-3 bg-white border border-slate-100 rounded-2xl shadow-sm outline-none font-bold text-sm placeholder:text-slate-300 focus:border-emerald-500 transition-all"
-            placeholder="Escanear código o buscar..."
+            placeholder="Buscar por nombre, código o descripción..."
             value={searchTerm}
             onKeyDown={handleKeyDown}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -203,13 +204,13 @@ const POS: React.FC<POSProps> = ({ user }) => {
             const activeDiscount = getActiveDiscount(product);
 
             return (
-              <div key={product.id} className="bg-white p-3 rounded-2xl border border-slate-50 shadow-sm flex flex-col justify-between min-h-[140px] hover:border-emerald-100 transition-all group relative">
+              <div key={product.id} className="bg-white p-3 rounded-2xl border border-slate-50 shadow-sm flex flex-col justify-between min-h-[160px] hover:border-emerald-100 transition-all group relative">
                 {activeDiscount && (
                   <div className="absolute top-2 right-2 bg-rose-500 text-white text-[7px] font-black px-1.5 py-0.5 rounded-full z-10 animate-pulse">
                     -{Math.round(activeDiscount.porcentaje)}%
                   </div>
                 )}
-                <div>
+                <div className="mb-2">
                   <div className="flex justify-between items-start mb-1">
                     <div className="flex flex-col gap-1">
                       <span className="text-[7px] font-black uppercase bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded-md w-fit">{product.stock} STOCK</span>
@@ -223,9 +224,14 @@ const POS: React.FC<POSProps> = ({ user }) => {
                       </span>
                     </div>
                   </div>
-                  <h4 className="font-black text-slate-800 text-xs leading-tight mb-0.5 truncate uppercase">{product.nombre}</h4>
+                  <h4 className="font-black text-slate-800 text-[10px] leading-tight mb-0.5 truncate uppercase">{product.nombre}</h4>
+                  {product.descripcion && (
+                    <p className="text-[8px] text-slate-400 italic font-medium line-clamp-2 leading-tight normal-case">
+                      {product.descripcion}
+                    </p>
+                  )}
                 </div>
-                <div className="flex items-center gap-2 mt-1">
+                <div className="flex items-center gap-2 mt-auto">
                   <div className="flex items-center bg-slate-50 rounded-lg p-0.5 border border-slate-100 scale-90 origin-left">
                     <button onClick={() => setPendingQuantities({...pendingQuantities, [product.id]: Math.max(1, currentPending - 1)})} className="w-6 h-6 flex items-center justify-center rounded-md bg-white shadow-sm text-slate-400 hover:bg-emerald-600 hover:text-white transition-all"><svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="4" d="M20 12H4"/></svg></button>
                     <span className="w-6 text-center font-black text-slate-800 text-[10px]">{currentPending}</span>
