@@ -44,8 +44,6 @@ export interface Producto {
   laboratorio?: string;
   precio: number; 
   precio_unidad: number; 
-  blisters_por_caja: number; 
-  unidades_por_caja: number; 
   stock: number; 
   ubicacion?: string;
   fecha_vencimiento?: string;
