@@ -16,6 +16,16 @@ export interface Usuario {
   roles?: Role;
 }
 
+export interface CierreDiario {
+  id: number;
+  fecha: string;
+  total_ventas: number;
+  total_costos: number;
+  utilidad: number;
+  usuario_id: number;
+  created_at: string;
+}
+
 export interface Descuento {
   id: number;
   producto_id: number;
@@ -29,13 +39,18 @@ export interface Producto {
   id: number;
   codigo_barras: string;
   nombre: string;
+  tipo: 'producto' | 'pastillas';
   descripcion?: string;
-  precio: number;
-  stock: number;
+  laboratorio?: string;
+  precio: number; 
+  precio_unidad: number; 
+  blisters_por_caja: number; 
+  unidades_por_caja: number; 
+  stock: number; 
   ubicacion?: string;
   fecha_vencimiento?: string;
   created_at: string;
-  descuentos?: Descuento[]; // Relación con descuentos
+  descuentos?: Descuento[];
 }
 
 export interface Proveedor {
@@ -54,7 +69,11 @@ export interface Venta {
   cantidad: number;
   total: number;
   metodo_pago: 'efectivo' | 'transferencia';
+  dinero_recibido?: number;
+  cambio?: number;
+  es_unidad: boolean;
   fecha: string;
+  transaccion_id?: string;
   productos?: Producto;
   usuarios?: Usuario;
 }

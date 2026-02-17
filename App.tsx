@@ -10,8 +10,10 @@ import Income from './components/Income';
 import Providers from './components/Providers';
 import Users from './components/Users';
 import Discounts from './components/Discounts';
+import Analytics from './components/Analytics';
+import SalesTimeline from './components/SalesTimeline';
 
-export type View = 'dashboard' | 'inventory' | 'pos' | 'income' | 'providers' | 'users' | 'discounts';
+export type View = 'dashboard' | 'inventory' | 'pos' | 'income' | 'providers' | 'users' | 'discounts' | 'analytics' | 'timeline';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<Usuario | null>(null);
@@ -69,6 +71,8 @@ const App: React.FC = () => {
       case 'providers': return <Providers />;
       case 'discounts': return user.role_id === 1 ? <Discounts /> : <div className="p-12 text-center text-rose-500 font-black uppercase tracking-widest text-xs">Acceso Denegado</div>;
       case 'users': return user.role_id === 1 ? <Users /> : <div className="p-12 text-center text-rose-500 font-black uppercase tracking-widest text-xs">Acceso Denegado</div>;
+      case 'analytics': return user.role_id === 1 ? <Analytics /> : <div className="p-12 text-center text-rose-500 font-black uppercase tracking-widest text-xs">Acceso Denegado</div>;
+      case 'timeline': return user.role_id === 1 ? <SalesTimeline /> : <div className="p-12 text-center text-rose-500 font-black uppercase tracking-widest text-xs">Acceso Denegado</div>;
       default: return <Dashboard user={user} />;
     }
   };
@@ -83,7 +87,7 @@ const App: React.FC = () => {
         <header className="mb-6 flex justify-between items-center bg-white p-5 lg:p-6 rounded-[2rem] shadow-sm border border-slate-100">
           <div>
             <h1 className="text-xl lg:text-2xl font-black text-slate-900 tracking-tight uppercase">
-              {view === 'pos' ? 'Ventas' : view === 'income' ? 'Ingresos' : view === 'inventory' ? 'Inventario' : view === 'users' ? 'Usuarios' : view === 'discounts' ? 'Descuentos' : view === 'providers' ? 'Proveedores' : 'Panel'}
+              {view === 'pos' ? 'Ventas' : view === 'income' ? 'Ingresos' : view === 'inventory' ? 'Inventario' : view === 'users' ? 'Usuarios' : view === 'discounts' ? 'Descuentos' : view === 'providers' ? 'Proveedores' : view === 'analytics' ? 'Rentabilidad' : view === 'timeline' ? 'Historial de Ventas' : 'Panel'}
             </h1>
             <p className="text-[10px] lg:text-xs text-slate-400 font-bold uppercase tracking-widest">Hola, {user.username || 'Usuario'} 👋</p>
           </div>
@@ -114,26 +118,16 @@ const App: React.FC = () => {
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
           <span className="text-[6px] uppercase tracking-tighter">Ventas</span>
         </button>
+        {isAdmin && (
+           <button onClick={() => setView('timeline')} className={`flex-1 flex flex-col items-center gap-0.5 transition-all ${view === 'timeline' ? 'text-indigo-600 font-black' : 'text-slate-300'}`}>
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <span className="text-[6px] uppercase tracking-tighter">Historial</span>
+          </button>
+        )}
         <button onClick={() => setView('inventory')} className={`flex-1 flex flex-col items-center gap-0.5 transition-all ${view === 'inventory' ? 'text-indigo-600 font-black' : 'text-slate-300'}`}>
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
           <span className="text-[6px] uppercase tracking-tighter">Stock</span>
         </button>
-        <button onClick={() => setView('income')} className={`flex-1 flex flex-col items-center gap-0.5 transition-all ${view === 'income' ? 'text-amber-600 font-black' : 'text-slate-300'}`}>
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 11l3-3m0 0l3 3m-3-3v8m0-13a9 9 0 110 18 9 9 0 010-18z"/></svg>
-          <span className="text-[6px] uppercase tracking-tighter">Ingreso</span>
-        </button>
-        {isAdmin && (
-          <>
-            <button onClick={() => setView('providers')} className={`flex-1 flex flex-col items-center gap-0.5 transition-all ${view === 'providers' ? 'text-blue-600 font-black' : 'text-slate-300'}`}>
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
-              <span className="text-[6px] uppercase tracking-tighter">Prov.</span>
-            </button>
-            <button onClick={() => setView('discounts')} className={`flex-1 flex flex-col items-center gap-0.5 transition-all ${view === 'discounts' ? 'text-rose-500 font-black' : 'text-slate-300'}`}>
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/></svg>
-              <span className="text-[6px] uppercase tracking-tighter">Desc.</span>
-            </button>
-          </>
-        )}
       </nav>
     </div>
   );
