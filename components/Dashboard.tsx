@@ -8,257 +8,145 @@ interface DashboardProps {
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ user }) => {
-  const [stats, setStats] = useState({
-    totalRevenue: 0,
-    totalSalesCount: 0,
-    stockLow: 0,
-    productsCount: 0,
-    expiringSoonCount: 0
-  });
+  const [stats, setStats] = useState({ revenue: 0, sales: 0, stockLow: 0, products: 0, expiring: 0 });
   const [recentSales, setRecentSales] = useState<any[]>([]);
-  const [topSellingProducts, setTopSellingProducts] = useState<any[]>([]);
-  const [expiringSoonProducts, setExpiringSoonProducts] = useState<Producto[]>([]);
+  const [topProducts, setTopProducts] = useState<any[]>([]);
+  const [expiringProducts, setExpiringProducts] = useState<Producto[]>([]);
   const [loading, setLoading] = useState(true);
-  const [dbError, setDbError] = useState<string | null>(null);
 
   const isAdmin = user.role_id === 1;
 
   useEffect(() => {
-    fetchDashboardData();
+    loadData();
   }, []);
 
-  const fetchDashboardData = async () => {
+  const loadData = async () => {
     setLoading(true);
-    setDbError(null);
     try {
-      // 1. Obtener todas las ventas
-      const { data: salesRes, error: sErr } = await supabase
-        .from('ventas')
-        .select('*, productos(nombre, codigo_barras)')
-        .order('fecha', { ascending: false });
+      const [salesRes, productsRes] = await Promise.all([
+        supabase.from('ventas').select('*, productos(nombre, codigo_barras)').order('fecha', { ascending: false }),
+        supabase.from('productos').select('*')
+      ]);
 
-      if (sErr) throw sErr;
+      const allSales = salesRes.data || [];
+      const allProducts = productsRes.data || [];
 
-      // 2. Obtener productos
-      const { data: productsRes, error: pErr } = await supabase
-        .from('productos')
-        .select('*');
+      // Cálculo de KPI simplificado
+      const revenue = allSales.reduce((sum, s) => sum + Number(s.total || 0), 0);
+      const stockLow = allProducts.filter(p => (p.stock || 0) < 10).length;
 
-      if (pErr) throw pErr;
+      // Cálculo de vencimientos (30 días)
+      const limitDate = new Date();
+      limitDate.setDate(limitDate.getDate() + 30);
+      const expiring = allProducts.filter(p => p.fecha_vencimiento && new Date(p.fecha_vencimiento) <= limitDate);
 
-      const allSales = salesRes || [];
-      const products = productsRes || [];
-
-      // Cálculos para Top Productos (SOLO SI ES ADMIN)
+      // Top Productos (Solo Admin)
       if (isAdmin) {
-        const salesMap: Record<number, { nombre: string, total: number, code: string }> = {};
+        const counts: Record<number, any> = {};
         allSales.forEach(s => {
-          const pid = s.producto_id;
-          if (!salesMap[pid]) {
-            salesMap[pid] = { 
-              nombre: s.productos?.nombre || 'Producto', 
-              total: 0,
-              code: s.productos?.codigo_barras || ''
-            };
-          }
-          salesMap[pid].total += s.cantidad;
+          if (!counts[s.producto_id]) counts[s.producto_id] = { nombre: s.productos?.nombre, total: 0 };
+          counts[s.producto_id].total += s.cantidad;
         });
-
-        const sortedTop = Object.values(salesMap)
-          .sort((a, b) => b.total - a.total)
-          .slice(0, 5);
-        setTopSellingProducts(sortedTop);
+        setTopProducts(Object.values(counts).sort((a, b) => b.total - a.total).slice(0, 5));
       }
 
-      // Cálculos de fechas
-      const today = new Date();
-      const nextMonth = new Date();
-      nextMonth.setDate(today.getDate() + 30);
+      setStats({ revenue, sales: allSales.length, stockLow, products: allProducts.length, expiring: expiring.length });
+      setRecentSales(allSales.slice(0, 8));
+      setExpiringProducts(expiring.sort((a, b) => new Date(a.fecha_vencimiento!).getTime() - new Date(b.fecha_vencimiento!).getTime()));
 
-      const expiringSoon = products.filter(p => {
-        if (!p.fecha_vencimiento) return false;
-        const expiryDate = new Date(p.fecha_vencimiento);
-        return expiryDate <= nextMonth;
-      });
-
-      const totalRevenue = allSales.reduce((sum, s) => sum + Number(s.total || 0), 0);
-      const lowStock = products.filter(p => (p.stock || 0) < 10).length;
-      
-      setRecentSales(allSales.slice(0, 15));
-      setExpiringSoonProducts(expiringSoon.sort((a, b) => 
-        new Date(a.fecha_vencimiento!).getTime() - new Date(b.fecha_vencimiento!).getTime()
-      ));
-
-      setStats({
-        totalRevenue: totalRevenue,
-        totalSalesCount: allSales.length,
-        stockLow: lowStock,
-        productsCount: products.length,
-        expiringSoonCount: expiringSoon.length
-      });
-
-    } catch (err: any) {
-      console.error("Dashboard Error:", err);
-      setDbError(err.message);
+    } catch (e) {
+      console.error(e);
     } finally {
       setLoading(false);
     }
   };
 
   if (loading) return (
-    <div className="flex flex-col items-center justify-center py-32 space-y-4 text-center">
-      <div className="w-10 h-10 border-4 border-slate-100 border-t-emerald-600 rounded-full animate-spin"></div>
-      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Sincronizando Business Intelligence...</p>
+    <div className="flex flex-col items-center justify-center py-24 space-y-3">
+      <div className="w-8 h-8 border-3 border-slate-100 border-t-slate-900 rounded-full animate-spin"></div>
+      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sincronizando...</p>
     </div>
   );
 
-  const statCards = [
-    { title: 'Ingresos Totales', value: `$${stats.totalRevenue.toLocaleString()}`, icon: '💰', color: 'text-emerald-600', bg: 'bg-emerald-50', show: true },
-    { title: 'Transacciones', value: stats.totalSalesCount, icon: '🧾', color: 'text-indigo-600', bg: 'bg-indigo-50', show: true },
-    { title: 'Artículos', value: stats.productsCount, icon: '📦', color: 'text-slate-600', bg: 'bg-slate-50', show: true },
-    { title: 'Stock Crítico', value: stats.stockLow, icon: '⚠️', color: 'text-amber-600', bg: 'bg-amber-50', show: true },
-    { title: 'Vencimientos', value: stats.expiringSoonCount, icon: '📅', color: 'text-rose-600', bg: 'bg-rose-50', show: isAdmin }
-  ].filter(card => card.show);
+  const kpis = [
+    { label: 'Ventas Hoy', val: `$${stats.revenue.toLocaleString()}`, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+    { label: 'Stock Bajo', val: stats.stockLow, color: 'text-amber-600', bg: 'bg-amber-50' },
+    { label: 'Vencimientos', val: stats.expiring, color: 'text-rose-600', bg: 'bg-rose-50', hide: !isAdmin }
+  ].filter(k => !k.hide);
 
   return (
-    <div className="space-y-8 pb-20">
-      {/* Grid de KPIs Superiores */}
-      <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-${statCards.length} gap-6`}>
-        {statCards.map((card, i) => (
-          <div key={i} className="bg-white p-6 rounded-[2.2rem] shadow-sm border border-slate-100 group hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
-            <div className={`w-10 h-10 ${card.bg} ${card.color} rounded-xl flex items-center justify-center text-lg mb-4 group-hover:rotate-6 transition-transform`}>{card.icon}</div>
-            <p className="text-slate-400 text-[9px] font-black uppercase tracking-widest leading-none">{card.title}</p>
-            <p className="text-2xl font-black text-slate-900 mt-1.5">{card.value}</p>
+    <div className="space-y-6 pb-24 lg:pb-8 animate-slide-up">
+      {/* KPIs Rápidos */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {kpis.map((k, i) => (
+          <div key={i} className="bg-white p-5 rounded-3xl border border-slate-100 flex items-center justify-between">
+            <div>
+              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{k.label}</p>
+              <p className={`text-xl font-black ${k.color}`}>{k.val}</p>
+            </div>
+            <div className={`w-10 h-10 ${k.bg} rounded-xl flex items-center justify-center text-lg shadow-sm`}>
+              {k.label.includes('Ventas') ? '💰' : k.label.includes('Stock') ? '⚠️' : '📅'}
+            </div>
           </div>
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* Lado Izquierdo: Ventas y Top (si es admin) */}
-        <div className={`${isAdmin ? 'lg:col-span-8' : 'lg:col-span-12'} space-y-8`}>
-          <div className="bg-white p-8 md:p-10 rounded-[3rem] shadow-sm border border-slate-100">
-            <div className="flex items-center justify-between mb-10">
-              <div>
-                <h3 className="text-xl font-black text-slate-900 tracking-tight">Actividad Transaccional</h3>
-                <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">Últimos movimientos de hoy</p>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              {recentSales.map((sale, i) => (
-                <div key={i} className="flex items-center justify-between p-4 bg-slate-50/50 rounded-2xl border border-slate-100 hover:bg-white hover:shadow-xl hover:border-emerald-100 transition-all duration-300">
-                  <div className="flex items-center gap-4 overflow-hidden">
-                    <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-emerald-500 shadow-sm border border-slate-100">
-                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7"/></svg>
-                    </div>
-                    <div className="truncate">
-                      <p className="font-black text-slate-900 text-sm truncate uppercase leading-none">{sale.productos?.nombre || 'Articulo'}</p>
-                      <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-1">
-                        {new Date(sale.fecha).toLocaleDateString()} &middot; {new Date(sale.fecha).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-black text-emerald-600 text-sm">${Number(sale.total).toLocaleString()}</p>
-                    <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">{sale.cantidad} uds</p>
-                  </div>
-                </div>
-              ))}
-            </div>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Ventas Recientes */}
+        <div className="lg:col-span-8 bg-white p-6 md:p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="font-black text-slate-900 text-lg uppercase tracking-tight">Actividad</h3>
+            <button onClick={loadData} className="text-slate-300 hover:text-slate-900 transition-colors">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            </button>
           </div>
-
-          {/* Ranking de Productos (Solo Admin) */}
-          {isAdmin && (
-            <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100">
-              <div className="flex items-center gap-4 mb-10">
-                <div className="w-12 h-12 bg-indigo-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-100">
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
-                </div>
-                <div>
-                  <h3 className="text-xl font-black text-slate-900 tracking-tight">Top Más Vendidos</h3>
-                  <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Ranking histórico por volumen</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {topSellingProducts.map((p, i) => (
-                  <div key={i} className="flex items-center gap-4 p-5 bg-slate-50/50 rounded-3xl border border-slate-100 hover:border-indigo-300 transition-all">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-[10px] shrink-0 ${
-                      i === 0 ? 'bg-amber-100 text-amber-600' : 'bg-white text-slate-400 border border-slate-200'
-                    }`}>
-                      #{i + 1}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h4 className="font-black text-slate-900 text-xs uppercase truncate leading-none">{p.nombre}</h4>
-                      <p className="text-[9px] text-slate-400 font-bold tracking-widest uppercase mt-1">{p.code || 'S/C'}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-lg font-black text-indigo-600 leading-none">{p.total}</p>
-                      <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mt-1">Uds.</p>
-                    </div>
+          <div className="space-y-3">
+            {recentSales.map((s, i) => (
+              <div key={i} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-transparent hover:border-slate-200 transition-all">
+                <div className="flex items-center gap-3 overflow-hidden">
+                  <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center text-emerald-500 shadow-sm shrink-0">
+                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"/></svg>
                   </div>
-                ))}
+                  <div className="truncate">
+                    <p className="font-black text-slate-800 text-xs truncate uppercase leading-none">{s.productos?.nombre}</p>
+                    <p className="text-[9px] text-slate-400 font-bold mt-1 uppercase">{s.cantidad} unidades</p>
+                  </div>
+                </div>
+                <div className="font-black text-slate-900 text-sm shrink-0">${Number(s.total).toLocaleString()}</div>
               </div>
-            </div>
-          )}
+            ))}
+          </div>
         </div>
 
-        {/* Lado Derecho: Alertas (Solo Admin) */}
+        {/* Sidebar de Alertas (Admin) */}
         {isAdmin && (
           <div className="lg:col-span-4 space-y-6">
-            <div className="bg-white p-8 rounded-[3rem] shadow-sm border border-slate-100">
-              <div className="flex items-center gap-3 mb-8">
-                <div className="w-10 h-10 bg-rose-50 text-rose-600 rounded-xl flex items-center justify-center">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 15c-.77 1.333.192 3 1.732 3z"/></svg>
-                </div>
-                <div>
-                  <h3 className="text-lg font-black text-slate-900 tracking-tight">Alertas de Vencimiento</h3>
-                  <p className="text-[9px] text-slate-400 font-black uppercase tracking-widest">Próximos 30 días</p>
-                </div>
-              </div>
-
-              <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1 custom-scrollbar">
-                {expiringSoonProducts.map((p, i) => (
-                  <div key={i} className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                    <h4 className="font-black text-slate-900 text-[10px] uppercase truncate mb-1.5">{p.nombre}</h4>
-                    <div className="flex justify-between items-center">
-                      <span className="text-rose-600 text-[9px] font-black uppercase tracking-widest">EXP: {new Date(p.fecha_vencimiento!).toLocaleDateString()}</span>
-                      <span className="bg-white px-2 py-0.5 rounded-lg border border-slate-200 text-[10px] font-bold">{p.stock} uds</span>
-                    </div>
+            <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm">
+              <h3 className="font-black text-slate-900 text-xs uppercase tracking-widest mb-4 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-rose-500"></span> Vencimientos
+              </h3>
+              <div className="space-y-3 max-h-[300px] overflow-y-auto custom-scrollbar">
+                {expiringProducts.map((p, i) => (
+                  <div key={i} className="p-3 bg-rose-50 rounded-xl border border-rose-100">
+                    <p className="font-black text-slate-800 text-[10px] uppercase truncate">{p.nombre}</p>
+                    <p className="text-[9px] text-rose-600 font-black uppercase mt-0.5">Vence: {new Date(p.fecha_vencimiento!).toLocaleDateString()}</p>
                   </div>
                 ))}
               </div>
             </div>
 
-            <div className="bg-slate-900 p-8 rounded-[3rem] shadow-xl text-white">
-              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-emerald-500 mb-2">Resumen de Almacén</p>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-3xl font-black">{stats.stockLow}</p>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Artículos en stock bajo</p>
-                </div>
-                <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center text-emerald-500">
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 15c-.77 1.333.192 3 1.732 3z"/></svg>
-                </div>
+            <div className="bg-slate-900 p-6 rounded-[2.5rem] text-white shadow-xl">
+              <p className="text-[9px] font-black text-emerald-400 uppercase tracking-widest mb-2">Top Vendido</p>
+              <div className="space-y-2">
+                {topProducts.map((p, i) => (
+                  <div key={i} className="flex justify-between items-center text-[11px] font-bold py-1 border-b border-white/5 last:border-0">
+                    <span className="truncate pr-2 opacity-80 uppercase">{p.nombre}</span>
+                    <span className="text-emerald-400 shrink-0">{p.total} uds</span>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
-        )}
-
-        {/* Mensaje Informativo para Vendedor (Si aplica) */}
-        {!isAdmin && (
-           <div className="lg:col-span-12">
-             <div className="bg-indigo-600 p-8 rounded-[3rem] shadow-xl text-white flex items-center justify-between">
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-60">Control de Disponibilidad</p>
-                  <p className="text-2xl font-black mt-1">Hay {stats.stockLow} artículos con pocas unidades</p>
-                  <p className="text-xs opacity-70 mt-1">Revisa el inventario para reponer stock si es necesario.</p>
-                </div>
-                <div className="w-16 h-16 rounded-3xl bg-white/10 flex items-center justify-center text-white backdrop-blur-md">
-                   <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                </div>
-             </div>
-           </div>
         )}
       </div>
     </div>

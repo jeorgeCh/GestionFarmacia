@@ -20,9 +20,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const savedUser = localStorage.getItem('drogueria_user');
-    if (savedUser) {
-      setUser(JSON.parse(savedUser));
-    }
+    if (savedUser) setUser(JSON.parse(savedUser));
     setLoading(false);
   }, []);
 
@@ -37,17 +35,13 @@ const App: React.FC = () => {
     localStorage.removeItem('drogueria_user');
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-600"></div>
-      </div>
-    );
-  }
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <div className="w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+    </div>
+  );
 
-  if (!user) {
-    return <Login onLogin={handleLogin} />;
-  }
+  if (!user) return <Login onLogin={handleLogin} />;
 
   const renderView = () => {
     switch (view) {
@@ -62,42 +56,48 @@ const App: React.FC = () => {
     }
   };
 
-  const getViewTitle = () => {
-    switch(view) {
-      case 'pos': return 'Punto de Venta';
-      case 'income': return 'Entrada de Mercancía';
-      case 'inventory': return 'Control de Inventario';
-      case 'providers': return 'Gestión de Proveedores';
-      case 'users': return 'Gestión de Usuarios';
-      case 'discounts': return 'Gestión de Descuentos';
-      default: return 'Panel de Control';
-    }
-  }
-
   return (
     <div className="flex min-h-screen bg-[#F8FAFC]">
       <Sidebar user={user} currentView={view} setView={setView} onLogout={handleLogout} />
-      <main className="flex-1 overflow-y-auto p-4 md:p-8">
-        <header className="mb-8 flex justify-between items-center bg-white p-6 rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.02)] border border-slate-100">
+      
+      <main className="flex-1 overflow-x-hidden overflow-y-auto p-4 lg:p-8">
+        <header className="mb-6 flex justify-between items-center bg-white p-5 lg:p-6 rounded-[2rem] shadow-sm border border-slate-100">
           <div>
-            <h1 className="text-2xl font-black text-slate-900 tracking-tight">
-              {getViewTitle()}
+            <h1 className="text-xl lg:text-2xl font-black text-slate-900 tracking-tight uppercase">
+              {view === 'pos' ? 'Ventas' : view === 'income' ? 'Ingresos' : view === 'inventory' ? 'Inventario' : 'Panel'}
             </h1>
-            <p className="text-sm text-slate-400 font-medium">Hola, {user.username} 👋</p>
+            <p className="text-[10px] lg:text-xs text-slate-400 font-bold uppercase tracking-widest">Hola, {user.username} 👋</p>
           </div>
-          <div className="flex items-center gap-4">
-             <div className={`px-4 py-2 rounded-2xl text-[11px] font-black uppercase tracking-widest ${user.role_id === 1 ? 'bg-indigo-50 text-indigo-600' : 'bg-emerald-50 text-emerald-600'}`}>
-               {user.role_id === 1 ? 'Administrador' : 'Vendedor'}
+          <div className="flex items-center gap-3">
+             <div className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest ${user.role_id === 1 ? 'bg-indigo-50 text-indigo-600' : 'bg-emerald-50 text-emerald-600'}`}>
+               {user.role_id === 1 ? 'Admin' : 'POS'}
              </div>
-             <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+             <div className="lg:hidden">
+               <button onClick={handleLogout} className="w-8 h-8 bg-rose-50 text-rose-500 rounded-lg flex items-center justify-center">
+                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M17 16l4-4m0 0l-4-4m4 4H7"/></svg>
+               </button>
              </div>
           </div>
         </header>
-        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-          {renderView()}
-        </div>
+
+        {renderView()}
       </main>
+
+      {/* Navegación Móvil (Solo Visible en pantallas pequeñas) */}
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 px-6 py-4 flex justify-between items-center z-40 shadow-[0_-10px_30px_rgba(0,0,0,0.03)]">
+        <button onClick={() => setView('dashboard')} className={`p-2 rounded-xl ${view === 'dashboard' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400'}`}>
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+        </button>
+        <button onClick={() => setView('pos')} className={`p-2 rounded-xl ${view === 'pos' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-400'}`}>
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
+        </button>
+        <button onClick={() => setView('inventory')} className={`p-2 rounded-xl ${view === 'inventory' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400'}`}>
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+        </button>
+        <button onClick={() => setView('income')} className={`p-2 rounded-xl ${view === 'income' ? 'bg-amber-600 text-white shadow-lg' : 'text-slate-400'}`}>
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 11l3-3m0 0l3 3m-3-3v8m0-13a9 9 0 110 18 9 9 0 010-18z"/></svg>
+        </button>
+      </nav>
     </div>
   );
 };
