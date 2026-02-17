@@ -35,7 +35,17 @@
           background: #94a3b8;
         }
 
-        /* Estilos para el calendario nativo "bien bonito" */
+        /* Corrección para el color "raro" del autocompletado */
+        input:-webkit-autofill,
+        input:-webkit-autofill:hover, 
+        input:-webkit-autofill:focus, 
+        input:-webkit-autofill:active {
+            -webkit-box-shadow: 0 0 0 40px white inset !important;
+            -webkit-text-fill-color: #0f172a !important;
+            transition: background-color 5000s ease-in-out 0s;
+        }
+
+        /* Estilos para el calendario nativo */
         input[type="date"]::-webkit-calendar-picker-indicator {
           background: transparent;
           bottom: 0;
@@ -59,7 +69,7 @@
           position: absolute;
           right: 1.5rem;
           pointer-events: none;
-          color: #10b981; /* emerald-500 */
+          color: #10b981;
         }
     </style>
 <script type="importmap">
