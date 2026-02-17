@@ -147,8 +147,8 @@ const Inventory: React.FC<InventoryProps> = ({ user }) => {
         <div className="relative flex-1">
           <input
             type="text"
-            className="w-full pl-12 pr-6 py-4 bg-white border border-slate-100 rounded-2xl focus:ring-4 focus:ring-emerald-500/5 outline-none font-medium transition-all"
-            placeholder="Buscar por nombre, código, ubicación o descripción..."
+            className="w-full pl-12 pr-6 py-4 bg-white border border-slate-100 rounded-2xl focus:ring-4 focus:ring-emerald-500/5 outline-none font-medium transition-all text-sm lg:text-base"
+            placeholder="Buscar por nombre, ubicación o descripción..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
@@ -159,7 +159,7 @@ const Inventory: React.FC<InventoryProps> = ({ user }) => {
         {isAdmin && (
           <button 
             onClick={() => handleOpenModal()}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-4 rounded-2xl font-black text-sm uppercase tracking-widest shadow-lg transition-all"
+            className="bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg transition-all"
           >
             Nuevo Producto
           </button>
@@ -171,21 +171,21 @@ const Inventory: React.FC<InventoryProps> = ({ user }) => {
           <table className="w-full text-left">
             <thead>
               <tr className="bg-slate-50/50 border-b border-slate-100">
-                <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Producto</th>
-                <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">P.V.P / Stock</th>
-                <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Descripción Detallada</th>
+                <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Producto & Ubicación</th>
+                <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap text-center">Datos Núm.</th>
+                <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Descripción Técnica</th>
                 <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {loading ? (
-                <tr><td colSpan={4} className="px-8 py-24 text-center text-slate-300 font-black animate-pulse">Sincronizando...</td></tr>
+                <tr><td colSpan={4} className="px-8 py-24 text-center text-slate-300 font-black animate-pulse uppercase tracking-widest text-[10px]">Sincronizando...</td></tr>
               ) : filteredProducts.length === 0 ? (
-                <tr><td colSpan={4} className="px-8 py-24 text-center text-slate-300 font-bold uppercase tracking-widest text-xs">No se encontraron productos</td></tr>
+                <tr><td colSpan={4} className="px-8 py-24 text-center text-slate-300 font-bold uppercase tracking-widest text-[10px]">No se encontraron productos</td></tr>
               ) : filteredProducts.map(product => (
                 <tr key={product.id} className="hover:bg-slate-50/30 transition-colors">
                   <td className="px-8 py-6 min-w-[200px]">
-                    <div className="font-black text-slate-900 uppercase truncate">{product.nombre}</div>
+                    <div className="font-black text-slate-900 uppercase truncate text-sm">{product.nombre}</div>
                     <div className="flex items-center gap-2 mt-1">
                       <span className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">{product.codigo_barras}</span>
                       {product.ubicacion && (
@@ -193,21 +193,19 @@ const Inventory: React.FC<InventoryProps> = ({ user }) => {
                       )}
                     </div>
                   </td>
-                  <td className="px-8 py-6 whitespace-nowrap">
+                  <td className="px-8 py-6 whitespace-nowrap text-center">
                     <div className="font-black text-indigo-600 text-sm">${Number(product.precio).toLocaleString()}</div>
-                    <div className="mt-1">
-                      <span className={`text-[9px] font-black uppercase ${product.stock < 10 ? 'text-rose-500' : 'text-emerald-500'}`}>
-                        {product.stock} Unidades
-                      </span>
+                    <div className={`text-[9px] font-black uppercase mt-1 ${product.stock < 10 ? 'text-rose-500' : 'text-emerald-500'}`}>
+                      {product.stock} Unidades
                     </div>
                   </td>
-                  <td className="px-8 py-6 min-w-[250px] max-w-md">
+                  <td className="px-8 py-6 min-w-[300px] max-w-md">
                     {product.descripcion ? (
                       <p className="text-[10px] text-slate-500 italic font-medium leading-relaxed line-clamp-2">
                         {product.descripcion}
                       </p>
                     ) : (
-                      <span className="text-[9px] text-slate-300 font-bold uppercase tracking-widest">Sin descripción</span>
+                      <span className="text-[9px] text-slate-300 font-bold uppercase tracking-widest">Sin detalles técnicos</span>
                     )}
                   </td>
                   <td className="px-8 py-6">
@@ -232,51 +230,51 @@ const Inventory: React.FC<InventoryProps> = ({ user }) => {
       {showModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-[3rem] w-full max-w-2xl shadow-2xl overflow-hidden animate-in zoom-in-95">
-            <div className="p-10 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-              <h3 className="text-2xl font-black text-slate-900">{formData.id ? 'Actualizar Producto' : 'Nuevo Producto'}</h3>
+            <div className="p-8 lg:p-10 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+              <h3 className="text-xl lg:text-2xl font-black text-slate-900 uppercase tracking-tight">{formData.id ? 'Actualizar Producto' : 'Nuevo Producto'}</h3>
               <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-rose-500 transition-colors">
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6"/></svg>
               </button>
             </div>
             
-            <form onSubmit={handleSave} className="p-10 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
-              {saveError && <div className="bg-rose-50 p-4 rounded-xl text-rose-600 text-xs font-bold">{saveError}</div>}
+            <form onSubmit={handleSave} className="p-8 lg:p-10 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
+              {saveError && <div className="bg-rose-50 p-4 rounded-xl text-rose-600 text-[10px] font-black uppercase tracking-widest">{saveError}</div>}
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="md:col-span-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase block mb-1">Nombre Comercial / Genérico</label>
-                  <input type="text" required className="w-full px-6 py-4 border border-slate-100 bg-slate-50 rounded-2xl focus:bg-white focus:border-emerald-500 outline-none font-bold transition-all" value={formData.nombre} onChange={e => setFormData({...formData, nombre: e.target.value})} />
+                  <label className="text-[10px] font-black text-slate-400 uppercase block mb-1 tracking-widest">Nombre Comercial / Genérico</label>
+                  <input type="text" required className="w-full px-6 py-4 border border-slate-100 bg-slate-50 rounded-2xl focus:bg-white focus:border-emerald-500 outline-none font-bold transition-all text-sm" value={formData.nombre} onChange={e => setFormData({...formData, nombre: e.target.value})} />
                 </div>
                 
                 <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase block mb-1">Código de Barras (EAN)</label>
-                  <input type="text" required className="w-full px-6 py-4 border border-slate-100 bg-slate-50 rounded-2xl focus:bg-white focus:border-emerald-500 outline-none font-bold transition-all" value={formData.codigo_barras} onChange={e => setFormData({...formData, codigo_barras: e.target.value})} />
+                  <label className="text-[10px] font-black text-slate-400 uppercase block mb-1 tracking-widest">Código de Barras (EAN)</label>
+                  <input type="text" required className="w-full px-6 py-4 border border-slate-100 bg-slate-50 rounded-2xl focus:bg-white focus:border-emerald-500 outline-none font-bold transition-all text-sm" value={formData.codigo_barras} onChange={e => setFormData({...formData, codigo_barras: e.target.value})} />
                 </div>
 
                 <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase block mb-1">Ubicación física (Estante/Caja)</label>
-                  <input type="text" placeholder="Ej: Estante B-4" className="w-full px-6 py-4 border border-slate-100 bg-slate-50 rounded-2xl focus:bg-white focus:border-emerald-500 outline-none font-bold transition-all" value={formData.ubicacion} onChange={e => setFormData({...formData, ubicacion: e.target.value})} />
+                  <label className="text-[10px] font-black text-slate-400 uppercase block mb-1 tracking-widest">Ubicación física</label>
+                  <input type="text" placeholder="Ej: Estante B-4" className="w-full px-6 py-4 border border-slate-100 bg-slate-50 rounded-2xl focus:bg-white focus:border-emerald-500 outline-none font-bold transition-all text-sm" value={formData.ubicacion} onChange={e => setFormData({...formData, ubicacion: e.target.value})} />
                 </div>
 
                 <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase block mb-1">Precio de Venta ($)</label>
-                  <input type="number" required disabled={!isAdmin} className="w-full px-6 py-4 border border-slate-100 bg-slate-50 rounded-2xl outline-none font-bold disabled:opacity-50 transition-all focus:bg-white focus:border-emerald-500" value={formData.precio} onChange={e => setFormData({...formData, precio: e.target.value})} />
+                  <label className="text-[10px] font-black text-slate-400 uppercase block mb-1 tracking-widest">Precio de Venta ($)</label>
+                  <input type="number" required disabled={!isAdmin} className="w-full px-6 py-4 border border-slate-100 bg-slate-50 rounded-2xl outline-none font-bold disabled:opacity-50 transition-all focus:bg-white focus:border-emerald-500 text-sm" value={formData.precio} onChange={e => setFormData({...formData, precio: e.target.value})} />
                 </div>
 
                 <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase block mb-1">Stock Actual</label>
-                  <input type="number" required disabled={!isAdmin} className="w-full px-6 py-4 border border-slate-100 bg-slate-50 rounded-2xl outline-none font-bold disabled:opacity-50 transition-all focus:bg-white focus:border-emerald-500" value={formData.stock} onChange={e => setFormData({...formData, stock: e.target.value})} />
+                  <label className="text-[10px] font-black text-slate-400 uppercase block mb-1 tracking-widest">Stock Actual</label>
+                  <input type="number" required disabled={!isAdmin} className="w-full px-6 py-4 border border-slate-100 bg-slate-50 rounded-2xl outline-none font-bold disabled:opacity-50 transition-all focus:bg-white focus:border-emerald-500 text-sm" value={formData.stock} onChange={e => setFormData({...formData, stock: e.target.value})} />
                 </div>
 
                 <div className="md:col-span-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase block mb-1">Descripción / Indicaciones</label>
-                  <textarea rows={3} className="w-full px-6 py-4 border border-slate-100 bg-slate-50 rounded-2xl focus:bg-white focus:border-emerald-500 outline-none font-bold transition-all resize-none" value={formData.descripcion} onChange={e => setFormData({...formData, descripcion: e.target.value})} placeholder="Detalles del medicamento, componentes o notas adicionales..." />
+                  <label className="text-[10px] font-black text-slate-400 uppercase block mb-1 tracking-widest">Descripción / Indicaciones</label>
+                  <textarea rows={3} className="w-full px-6 py-4 border border-slate-100 bg-slate-50 rounded-2xl focus:bg-white focus:border-emerald-500 outline-none font-bold transition-all resize-none text-sm" value={formData.descripcion} onChange={e => setFormData({...formData, descripcion: e.target.value})} placeholder="Detalles del medicamento..." />
                 </div>
               </div>
 
               <div className="flex gap-4 pt-6 border-t border-slate-50">
-                <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-4 border border-slate-100 rounded-2xl font-black text-[10px] uppercase text-slate-400 hover:bg-slate-50 transition-all">Cancelar</button>
-                <button type="submit" disabled={isSaving} className="flex-2 py-4 bg-emerald-600 text-white rounded-2xl font-black text-[10px] uppercase shadow-lg disabled:opacity-50 hover:bg-emerald-700 transition-all">
+                <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-4 border border-slate-100 rounded-2xl font-black text-[10px] uppercase text-slate-400 hover:bg-slate-50 transition-all tracking-widest">Cancelar</button>
+                <button type="submit" disabled={isSaving} className="flex-2 py-4 bg-emerald-600 text-white rounded-2xl font-black text-[10px] uppercase shadow-lg disabled:opacity-50 hover:bg-emerald-700 transition-all tracking-widest">
                   {isSaving ? 'Guardando...' : 'Guardar Producto'}
                 </button>
               </div>
