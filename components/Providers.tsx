@@ -86,12 +86,12 @@ const Providers: React.FC = () => {
           <form onSubmit={handleSave} className="bg-white rounded-[3rem] w-full max-w-xl p-12 space-y-8 shadow-2xl animate-in zoom-in-95 duration-300">
             <div>
               <h3 className="text-2xl font-black text-slate-900 tracking-tight mb-2">{current.id ? 'Actualizar' : 'Vincular'} Proveedor</h3>
-              <p className="text-slate-400 text-sm font-medium">Completa la información corporativa.</p>
+              <p className="text-slate-400 text-sm font-medium">Completa la información del proveedor.</p>
             </div>
             
             <div className="space-y-4">
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Razón Social</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nombre de Proveedor</label>
                 <input type="text" required className="w-full px-6 py-4 rounded-2xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-[6px] focus:ring-indigo-500/5 focus:border-indigo-600 outline-none font-bold transition-all" value={current.nombre} onChange={e => setCurrent({...current, nombre: e.target.value})} />
               </div>
               <div className="space-y-2">
