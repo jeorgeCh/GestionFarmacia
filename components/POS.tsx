@@ -27,11 +27,19 @@ const POS: React.FC<POSProps> = ({ user }) => {
   const [saleModes, setSaleModes] = useState<Record<number, 'caja' | 'unidad'>>({});
   const [showMobileCart, setShowMobileCart] = useState(false);
   const [lastAddedId, setLastAddedId] = useState<number | null>(null);
+  
+  // Estados para el Escáner
+  const [isScanning, setIsScanning] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const scanIntervalRef = useRef<number | null>(null);
+
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchProducts();
     if (searchInputRef.current) searchInputRef.current.focus();
+    return () => stopScanner();
   }, []);
 
   const fetchProducts = async () => {
@@ -45,6 +53,69 @@ const POS: React.FC<POSProps> = ({ user }) => {
       const initialModes: Record<number, 'caja' | 'unidad'> = {};
       data.forEach(p => initialModes[p.id] = 'caja');
       setSaleModes(initialModes);
+    }
+  };
+
+  const startScanner = async () => {
+    setIsScanning(true);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: 'environment' } 
+      });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.setAttribute('playsinline', 'true');
+        videoRef.current.play();
+        
+        // Iniciar detección
+        if ('BarcodeDetector' in window) {
+          const barcodeDetector = new (window as any).BarcodeDetector({
+            formats: ['ean_13', 'ean_8', 'code_128', 'qr_code', 'upc_a']
+          });
+
+          scanIntervalRef.current = window.setInterval(async () => {
+            if (videoRef.current && videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
+              try {
+                const barcodes = await barcodeDetector.detect(videoRef.current);
+                if (barcodes.length > 0) {
+                  const code = barcodes[0].rawValue;
+                  handleBarcodeDetected(code);
+                }
+              } catch (e) {
+                console.error("Barcode detection error:", e);
+              }
+            }
+          }, 500);
+        } else {
+          console.warn("BarcodeDetector no soportado en este navegador.");
+        }
+      }
+    } catch (err) {
+      console.error("Error al acceder a la cámara:", err);
+      alert("No se pudo acceder a la cámara");
+      setIsScanning(false);
+    }
+  };
+
+  const stopScanner = () => {
+    if (scanIntervalRef.current) clearInterval(scanIntervalRef.current);
+    if (videoRef.current && videoRef.current.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream;
+      stream.getTracks().forEach(track => track.stop());
+    }
+    setIsScanning(false);
+  };
+
+  const handleBarcodeDetected = (code: string) => {
+    const product = products.find(p => p.codigo_barras === code);
+    if (product) {
+      addToCart(product);
+      stopScanner();
+      // Pequeña vibración si el dispositivo lo soporta
+      if (navigator.vibrate) navigator.vibrate(200);
+    } else {
+      setSearchTerm(code);
+      stopScanner();
     }
   };
 
@@ -155,7 +226,6 @@ const POS: React.FC<POSProps> = ({ user }) => {
         await supabase.rpc('deduct_stock', { p_id: item.product.id, p_qty: unitsToDeduct });
       }
 
-      // Guardar resumen antes de limpiar para mostrarlo en la confirmación
       setShowOrderSummary({
         transactionId: transactionId.split('-')[0].toUpperCase(),
         items: [...cart],
@@ -189,17 +259,25 @@ const POS: React.FC<POSProps> = ({ user }) => {
         
         {/* BUSCADOR Y LISTA DE PRODUCTOS (IZQUIERDA) */}
         <div className="lg:col-span-7 flex flex-col space-y-4">
-          <div className="relative group">
-            <input
-              ref={searchInputRef}
-              className="w-full px-14 py-6 bg-white border-2 border-slate-100 rounded-[2.5rem] outline-none font-bold text-lg shadow-sm focus:border-emerald-500 transition-all"
-              placeholder="Escribe para buscar..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-            <span className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-            </span>
+          <div className="relative group flex items-center gap-3">
+            <div className="relative flex-1">
+              <input
+                ref={searchInputRef}
+                className="w-full px-14 py-6 bg-white border-2 border-slate-100 rounded-[2.5rem] outline-none font-bold text-lg shadow-sm focus:border-emerald-500 transition-all"
+                placeholder="Escribe o escanea..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+              <span className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+              </span>
+            </div>
+            <button 
+              onClick={startScanner}
+              className="w-16 h-16 bg-slate-900 text-white rounded-[1.8rem] flex items-center justify-center shadow-lg active:scale-90 transition-all"
+            >
+              <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+            </button>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 overflow-y-auto custom-scrollbar flex-1 pb-32 lg:pb-0 pr-1 max-h-[calc(100vh-320px)] lg:max-h-none">
@@ -324,6 +402,36 @@ const POS: React.FC<POSProps> = ({ user }) => {
         </div>
       </div>
 
+      {/* MODAL ESCÁNER */}
+      {isScanning && (
+        <div className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center p-6 animate-in fade-in">
+          <div className="w-full max-w-lg aspect-square relative rounded-[3rem] overflow-hidden border-4 border-emerald-500/30">
+             <video ref={videoRef} className="w-full h-full object-cover" />
+             <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-64 h-64 border-2 border-emerald-500 rounded-3xl relative shadow-[0_0_0_1000px_rgba(0,0,0,0.5)]">
+                   <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-1 bg-emerald-500 shadow-[0_0_20px_rgba(16,185,129,1)] animate-scan-line"></div>
+                </div>
+             </div>
+             <div className="absolute bottom-8 left-0 right-0 text-center">
+                <p className="text-white font-black uppercase text-[10px] tracking-widest bg-black/50 px-6 py-2 rounded-full inline-block">Alinea el código de barras</p>
+             </div>
+          </div>
+          <button 
+            onClick={stopScanner}
+            className="mt-12 bg-white/10 hover:bg-rose-500 text-white px-12 py-5 rounded-[2rem] font-black text-xs uppercase tracking-widest backdrop-blur-md transition-all"
+          >
+            Cancelar Escaneo
+          </button>
+          <style>{`
+            @keyframes scan-line {
+              0% { top: 0; }
+              100% { top: 100%; }
+            }
+            .animate-scan-line { animation: scan-line 2s infinite ease-in-out; }
+          `}</style>
+        </div>
+      )}
+
       {/* BOTÓN FLOTANTE MÓVIL */}
       {!showMobileCart && cart.length > 0 && (
         <button 
@@ -338,71 +446,94 @@ const POS: React.FC<POSProps> = ({ user }) => {
         </button>
       )}
 
-      {/* PÁGINA DE CONFIRMACIÓN (RECIBO DIGITAL) */}
+      {/* PÁGINA DE CONFIRMACIÓN (RECIBO DIGITAL ESTÉTICO) */}
       {showOrderSummary && (
-        <div className="fixed inset-0 z-[100] bg-slate-950/95 backdrop-blur-xl flex items-center justify-center p-4 lg:p-12 animate-in fade-in">
-          <div className="bg-white w-full max-w-2xl rounded-[4rem] overflow-hidden shadow-2xl animate-in zoom-in-95 flex flex-col md:flex-row h-full max-h-[85vh] lg:max-h-[750px]">
+        <div className="fixed inset-0 z-[200] bg-slate-950/98 backdrop-blur-2xl flex items-center justify-center p-4 lg:p-12 animate-in fade-in duration-500">
+          <div className="bg-white w-full max-w-4xl rounded-[4.5rem] overflow-hidden shadow-[0_40px_100px_rgba(0,0,0,0.4)] animate-in zoom-in-95 flex flex-col md:flex-row h-full max-h-[90vh]">
             
-            {/* Lado Izquierdo: Estado */}
-            <div className="md:w-2/5 bg-emerald-600 p-12 text-white flex flex-col items-center justify-center text-center">
-               <div className="w-24 h-24 bg-white/20 rounded-[3rem] flex items-center justify-center text-5xl mb-8 shadow-inner animate-bounce">✓</div>
-               <h2 className="text-3xl font-black uppercase tracking-tight mb-2 leading-none">Venta<br/>Exitosa</h2>
-               <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-60">Droguería Pro</p>
-               <div className="mt-12 w-full pt-12 border-t border-white/10 text-left">
-                  <p className="text-[9px] font-black uppercase tracking-widest opacity-60 mb-1">ID Transacción</p>
-                  <p className="font-black text-sm uppercase tracking-widest">#{showOrderSummary.transactionId}</p>
-                  <p className="text-[9px] font-black uppercase tracking-widest opacity-60 mt-6 mb-1">Fecha y Hora</p>
-                  <p className="font-black text-sm">{showOrderSummary.date}</p>
+            {/* Lado Izquierdo: Diseño de Factura */}
+            <div className="md:w-[45%] bg-slate-900 p-12 lg:p-16 text-white flex flex-col justify-between relative overflow-hidden shrink-0">
+               <div className="absolute top-0 right-0 w-80 h-80 bg-emerald-500/10 rounded-full blur-[100px] -mr-40 -mt-40"></div>
+               
+               <div>
+                 <div className="w-20 h-20 bg-emerald-500 rounded-[2rem] flex items-center justify-center text-white text-4xl mb-10 shadow-2xl shadow-emerald-500/20 animate-in slide-in-from-top-10">✓</div>
+                 <h2 className="text-5xl font-black uppercase tracking-tighter leading-[0.9] mb-4">Venta<br/><span className="text-emerald-500">Completada</span></h2>
+                 <p className="text-slate-500 font-bold uppercase tracking-[0.3em] text-[10px]">Droguería Pro v3.0</p>
+               </div>
+
+               <div className="space-y-8 pt-10 border-t border-white/10">
+                  <div className="grid grid-cols-2 gap-8">
+                     <div>
+                       <p className="text-slate-500 font-black uppercase text-[8px] tracking-widest mb-1">ID Transacción</p>
+                       <p className="font-black text-sm text-indigo-400">#{showOrderSummary.transactionId}</p>
+                     </div>
+                     <div>
+                       <p className="text-slate-500 font-black uppercase text-[8px] tracking-widest mb-1">Método</p>
+                       <p className="font-black text-sm uppercase">{showOrderSummary.paymentMethod}</p>
+                     </div>
+                  </div>
+                  <div>
+                    <p className="text-slate-500 font-black uppercase text-[8px] tracking-widest mb-1">Fecha de Operación</p>
+                    <p className="font-black text-sm">{showOrderSummary.date}</p>
+                  </div>
+                  <div className="bg-white/5 p-6 rounded-3xl border border-white/5">
+                     <p className="text-slate-500 font-black uppercase text-[8px] tracking-widest mb-2">Resumen de Pago</p>
+                     <div className="flex justify-between items-end">
+                        <div>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase mb-1">Recibido</p>
+                          <p className="font-black text-xl">${showOrderSummary.cashReceived.toLocaleString()}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[10px] text-emerald-500 font-bold uppercase mb-1">Cambio</p>
+                          <p className="font-black text-3xl text-emerald-500Tracking-tighter">${showOrderSummary.change.toLocaleString()}</p>
+                        </div>
+                     </div>
+                  </div>
                </div>
             </div>
 
-            {/* Lado Derecho: Detalle de Productos */}
-            <div className="md:w-3/5 p-12 flex flex-col bg-white overflow-hidden">
-               <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.4em] mb-8">Detalle de Factura</h3>
+            {/* Lado Derecho: Lista de Productos y Acción */}
+            <div className="md:w-[55%] p-12 lg:p-16 flex flex-col bg-white overflow-hidden">
+               <div className="flex justify-between items-center mb-10">
+                 <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.4em]">Detalle de Productos</h3>
+                 <span className="bg-slate-100 px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest">{showOrderSummary.items.length} Items</span>
+               </div>
                
-               <div className="flex-1 overflow-y-auto space-y-6 pr-2 custom-scrollbar">
+               <div className="flex-1 overflow-y-auto space-y-5 pr-4 custom-scrollbar">
                   {showOrderSummary.items.map((item: any, i: number) => (
-                    <div key={i} className="flex justify-between items-start pb-4 border-b border-slate-50">
-                       <div className="flex-1 pr-4">
-                          <p className="font-black text-slate-900 text-sm uppercase leading-none mb-1">{item.product.nombre}</p>
-                          <p className="text-[10px] text-slate-400 font-bold">
-                            {item.cantidad} {item.saleMode === 'unidad' ? 'Unidad(es)' : 'Caja(s)'}
-                          </p>
+                    <div key={i} className="flex justify-between items-center pb-5 border-b border-slate-50 animate-in slide-in-from-right-10" style={{ animationDelay: `${i * 100}ms` }}>
+                       <div className="flex-1 pr-6">
+                          <p className="font-black text-slate-900 text-base uppercase leading-tight mb-1">{item.product.nombre}</p>
+                          <div className="flex gap-3">
+                             <span className="text-[10px] text-slate-400 font-bold">CANT: {item.cantidad}</span>
+                             <span className="text-[10px] text-indigo-500 font-black uppercase tracking-widest">{item.saleMode}</span>
+                          </div>
                        </div>
-                       <p className="font-black text-slate-900 text-sm">${(item.cantidad * item.finalPrice).toLocaleString()}</p>
+                       <p className="font-black text-slate-900 text-lg tracking-tighter">${(item.cantidad * item.finalPrice).toLocaleString()}</p>
                     </div>
                   ))}
                </div>
 
-               <div className="mt-8 pt-8 border-t-2 border-dashed border-slate-100 space-y-4">
-                  <div className="flex justify-between items-center px-2">
-                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Método de Pago</span>
-                     <span className="text-[10px] font-black uppercase bg-slate-100 px-3 py-1 rounded-lg">{showOrderSummary.paymentMethod}</span>
+               <div className="mt-12 pt-10 border-t-4 border-dashed border-slate-100 space-y-10">
+                  <div className="flex justify-between items-end px-2">
+                     <div>
+                       <span className="text-[11px] font-black text-slate-400 uppercase tracking-[0.4em] block mb-2">Total Factura</span>
+                       <span className="text-6xl font-black text-slate-950 tracking-tighter">${showOrderSummary.total.toLocaleString()}</span>
+                     </div>
+                     <div className="text-right">
+                       <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Impuestos Incl.</p>
+                       <p className="text-xs font-black text-emerald-600 uppercase">Cerrado</p>
+                     </div>
                   </div>
-                  {showOrderSummary.paymentMethod === 'efectivo' && (
-                    <div className="flex justify-between items-center px-2 text-slate-500">
-                       <span className="text-[10px] font-black uppercase tracking-widest">Recibido</span>
-                       <span className="font-black text-sm">${showOrderSummary.cashReceived.toLocaleString()}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between items-center px-2 pt-2">
-                     <span className="text-xl font-black text-slate-900 uppercase tracking-tight">Total Cobrado</span>
-                     <span className="text-3xl font-black text-emerald-600 tracking-tighter">${showOrderSummary.total.toLocaleString()}</span>
-                  </div>
-                  {showOrderSummary.paymentMethod === 'efectivo' && (
-                    <div className="bg-emerald-50 p-6 rounded-3xl flex justify-between items-center mt-4">
-                       <span className="text-[11px] font-black text-emerald-600 uppercase tracking-widest">Cambio Entregado</span>
-                       <span className="text-2xl font-black text-emerald-700 tracking-tighter">${showOrderSummary.change.toLocaleString()}</span>
-                    </div>
-                  )}
-               </div>
 
-               <button 
-                  onClick={() => setShowOrderSummary(null)}
-                  className="w-full py-6 bg-slate-900 text-white rounded-[2.5rem] font-black text-xs uppercase tracking-[0.4em] shadow-2xl mt-8 hover:bg-slate-800 transition-all active:scale-95"
-               >
-                 Nueva Venta
-               </button>
+                  <button 
+                    onClick={() => setShowOrderSummary(null)}
+                    className="w-full py-8 bg-slate-950 text-white rounded-[2.8rem] font-black text-sm uppercase tracking-[0.4em] shadow-[0_30px_60px_-15px_rgba(0,0,0,0.5)] hover:bg-emerald-600 transition-all active:scale-95 group flex items-center justify-center gap-4"
+                  >
+                    Nueva Transacción
+                    <svg className="w-6 h-6 group-hover:translate-x-2 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg>
+                  </button>
+               </div>
             </div>
           </div>
         </div>
