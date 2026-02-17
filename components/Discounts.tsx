@@ -94,15 +94,15 @@ const Discounts: React.FC = () => {
   };
 
   return (
-    <div className="space-y-8 animate-slide-up">
+    <div className="space-y-8 animate-slide-up pb-10">
       <div className="flex flex-col md:flex-row justify-between md:items-center gap-6">
-        <div>
+        <div className="px-1">
           <h2 className="text-2xl font-black text-slate-900 tracking-tight uppercase">Campañas de Oferta</h2>
           <p className="text-slate-400 text-sm font-medium">Configure descuentos automáticos para el POS.</p>
         </div>
         <button 
           onClick={() => handleOpenModal()}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-4 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center gap-3 transition-all shadow-xl shadow-emerald-900/10"
+          className="w-full md:w-auto bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-5 rounded-[2rem] font-black text-sm uppercase tracking-widest flex items-center justify-center gap-3 transition-all shadow-xl"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
           Nueva Promoción
@@ -114,7 +114,7 @@ const Discounts: React.FC = () => {
           <div className="col-span-full py-20 text-center text-slate-400 font-black uppercase text-xs">Consultando campañas...</div>
         ) : discounts.length === 0 ? (
           <div className="col-span-full py-24 text-center bg-white border-2 border-dashed border-slate-100 rounded-[3rem] opacity-40">
-            <p className="font-black text-[10px] uppercase tracking-widest">No hay descuentos vigentes</p>
+            <p className="font-black text-[10px] uppercase tracking-widest px-4">No hay descuentos vigentes actualmente</p>
           </div>
         ) : (
           discounts.map(d => (
@@ -127,12 +127,12 @@ const Discounts: React.FC = () => {
 
               <div className="pr-16 mb-8">
                 <h4 className="text-xl font-black text-slate-900 uppercase truncate leading-none mb-1">{d.productos?.nombre}</h4>
-                <p className="text-[10px] text-indigo-600 font-black uppercase tracking-widest">Laboratorio: {d.productos?.laboratorio || 'N/A'}</p>
+                <p className="text-[10px] text-indigo-600 font-black uppercase tracking-widest">Lab: {d.productos?.laboratorio || 'N/A'}</p>
               </div>
 
               <div className="flex items-center gap-4 mb-8">
                 <div className="flex-1">
-                  <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest mb-1">P. Base</p>
+                  <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest mb-1">Precio Base</p>
                   <p className="text-sm font-bold text-slate-400 line-through">${Number(d.productos?.precio).toLocaleString()}</p>
                 </div>
                 <div className="flex-1 text-right">
@@ -154,9 +154,9 @@ const Discounts: React.FC = () => {
 
       {showModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in">
-          <form onSubmit={handleSave} className="bg-white rounded-[3.5rem] w-full max-w-xl p-12 space-y-8 shadow-2xl animate-in zoom-in-95">
+          <form onSubmit={handleSave} className="bg-white rounded-[3.5rem] w-full max-w-xl p-8 md:p-12 space-y-8 shadow-2xl animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
             <div>
-              <h3 className="text-2xl font-black text-slate-900 tracking-tight uppercase">Definir Campaña</h3>
+              <h3 className="text-2xl font-black text-slate-900 tracking-tight uppercase leading-none mb-2">Definir Campaña</h3>
               <p className="text-slate-400 text-sm font-medium">Ajuste el valor final de venta del medicamento.</p>
             </div>
 
@@ -176,7 +176,7 @@ const Discounts: React.FC = () => {
               </div>
 
               {selectedProduct && (
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                    <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100">
                       <p className="text-[9px] font-black text-slate-400 uppercase mb-2">Precio Actual</p>
                       <p className="text-xl font-black text-slate-900">${Number(selectedProduct.precio).toLocaleString()}</p>
@@ -196,13 +196,13 @@ const Discounts: React.FC = () => {
 
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Control de Porcentaje</label>
-                <div className="flex items-center gap-6 bg-slate-50 p-6 rounded-[2.5rem] border border-slate-100">
+                <div className="flex flex-col sm:flex-row items-center gap-6 bg-slate-50 p-6 rounded-[2.5rem] border border-slate-100">
                   <input 
                     type="range" 
                     min="1" 
                     max="90" 
                     step="0.5" 
-                    className="flex-1 accent-emerald-600"
+                    className="flex-1 accent-emerald-600 w-full"
                     value={porcentaje}
                     onChange={e => setPorcentaje(e.target.value)}
                   />
@@ -211,9 +211,9 @@ const Discounts: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex gap-4 pt-4">
-              <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-5 border-2 border-slate-100 rounded-2xl text-slate-400 font-black text-xs uppercase tracking-widest">Cerrar</button>
-              <button type="submit" className="flex-2 py-5 bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl">Aplicar Oferta</button>
+            <div className="flex flex-col sm:flex-row gap-4 pt-4">
+              <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-5 border-2 border-slate-100 rounded-[2rem] text-slate-400 font-black text-xs uppercase tracking-widest">Cerrar</button>
+              <button type="submit" className="flex-2 py-5 bg-emerald-600 text-white rounded-[2rem] font-black text-xs uppercase tracking-[0.2em] shadow-xl">Aplicar Oferta</button>
             </div>
           </form>
         </div>
