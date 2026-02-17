@@ -20,7 +20,6 @@ const Inventory: React.FC<InventoryProps> = ({ user }) => {
     nombre: '',
     codigo_barras: '',
     precio: '',
-    stock: '',
     descripcion: '',
     ubicacion: '',
     fecha_vencimiento: ''
@@ -67,7 +66,6 @@ const Inventory: React.FC<InventoryProps> = ({ user }) => {
         nombre: p.nombre,
         codigo_barras: p.codigo_barras,
         precio: String(p.precio),
-        stock: String(p.stock),
         descripcion: p.descripcion || '',
         ubicacion: p.ubicacion || '',
         fecha_vencimiento: p.fecha_vencimiento || ''
@@ -78,7 +76,6 @@ const Inventory: React.FC<InventoryProps> = ({ user }) => {
         nombre: '',
         codigo_barras: '',
         precio: '',
-        stock: '',
         descripcion: '',
         ubicacion: '',
         fecha_vencimiento: ''
@@ -102,7 +99,7 @@ const Inventory: React.FC<InventoryProps> = ({ user }) => {
 
     if (isAdmin) {
       productToSave.precio = parseFloat(formData.precio) || 0;
-      productToSave.stock = parseInt(formData.stock) || 0;
+      // El stock NO se guarda aquí, se maneja por Ingresos
     }
     
     try {
@@ -116,8 +113,8 @@ const Inventory: React.FC<InventoryProps> = ({ user }) => {
       } else {
         if (!isAdmin) {
           productToSave.precio = 0;
-          productToSave.stock = 0;
         }
+        // Al crear un producto nuevo, el stock inicia en 0 por defecto en la DB
         const { error: insertError } = await supabase
           .from('productos')
           .insert([productToSave]);
@@ -261,15 +258,18 @@ const Inventory: React.FC<InventoryProps> = ({ user }) => {
                   <input type="number" required disabled={!isAdmin} className="w-full px-6 py-4 border border-slate-100 bg-slate-50 rounded-2xl outline-none font-bold disabled:opacity-50 transition-all focus:bg-white focus:border-emerald-500 text-sm" value={formData.precio} onChange={e => setFormData({...formData, precio: e.target.value})} />
                 </div>
 
-                <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase block mb-1 tracking-widest">Stock Actual</label>
-                  <input type="number" required disabled={!isAdmin} className="w-full px-6 py-4 border border-slate-100 bg-slate-50 rounded-2xl outline-none font-bold disabled:opacity-50 transition-all focus:bg-white focus:border-emerald-500 text-sm" value={formData.stock} onChange={e => setFormData({...formData, stock: e.target.value})} />
-                </div>
-
                 <div className="md:col-span-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase block mb-1 tracking-widest">Descripción / Indicaciones</label>
                   <textarea rows={3} className="w-full px-6 py-4 border border-slate-100 bg-slate-50 rounded-2xl focus:bg-white focus:border-emerald-500 outline-none font-bold transition-all resize-none text-sm" value={formData.descripcion} onChange={e => setFormData({...formData, descripcion: e.target.value})} placeholder="Detalles del medicamento..." />
                 </div>
+              </div>
+
+              <div className="bg-amber-50 p-6 rounded-2xl border border-amber-100">
+                <p className="text-[9px] font-black text-amber-700 uppercase tracking-[0.2em] flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                  Gestión de Existencias
+                </p>
+                <p className="text-[10px] text-amber-600 font-medium mt-1">El stock se actualiza automáticamente al registrar facturas en el módulo de <strong>Ingresos</strong>.</p>
               </div>
 
               <div className="flex gap-4 pt-6 border-t border-slate-50">

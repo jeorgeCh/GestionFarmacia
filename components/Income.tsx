@@ -19,6 +19,7 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
     proveedor_id: '',
     cantidad: 1,
     costo_unitario: 0,
+    lote: '',
     fecha_vencimiento: ''
   });
   
@@ -56,7 +57,7 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
     
     setLoading(true);
     try {
-      // 1. Registrar el ingreso con fecha de vencimiento
+      // 1. Registrar el ingreso con lote y fecha de vencimiento
       const { error: incomeError } = await supabase.from('ingresos').insert({
         usuario_id: user.id,
         producto_id: selectedProduct.id,
@@ -64,12 +65,13 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
         cantidad: formData.cantidad,
         costo_unitario: formData.costo_unitario,
         total: formData.cantidad * formData.costo_unitario,
+        lote: formData.lote.trim().toUpperCase(),
         fecha_vencimiento: formData.fecha_vencimiento || null
       });
 
       if (incomeError) throw incomeError;
 
-      // 2. Actualizar la fecha de vencimiento en el maestro de productos
+      // 2. Actualizar la fecha de vencimiento en el maestro de productos si aplica
       if (formData.fecha_vencimiento) {
         await supabase.from('productos')
           .update({ fecha_vencimiento: formData.fecha_vencimiento })
@@ -77,7 +79,7 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
       }
       
       setSuccess(true);
-      setFormData({ proveedor_id: '', cantidad: 1, costo_unitario: 0, fecha_vencimiento: '' });
+      setFormData({ proveedor_id: '', cantidad: 1, costo_unitario: 0, lote: '', fecha_vencimiento: '' });
       setSelectedProduct(null);
       setSearchTerm('');
       fetchData(); 
@@ -113,11 +115,11 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
+    <div className="max-w-5xl mx-auto space-y-8">
       <div className="bg-white rounded-[3rem] shadow-[0_20px_80px_rgba(0,0,0,0.03)] border border-slate-100 overflow-hidden">
         <div className="bg-slate-50/50 p-10 border-b border-slate-100">
           <h2 className="text-2xl font-black text-slate-900 tracking-tight">Entrada de Mercancía</h2>
-          <p className="text-slate-400 text-sm font-medium mt-1">Registra nuevos lotes y actualiza fechas de vencimiento.</p>
+          <p className="text-slate-400 text-sm font-medium mt-1">Registra nuevos lotes y actualiza existencias de forma centralizada.</p>
         </div>
         
         <form onSubmit={handleSubmit} className="p-10 space-y-8">
@@ -129,7 +131,7 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
                   ref={searchInputRef}
                   type="text"
                   className="w-full px-12 py-4 rounded-2xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-[6px] focus:ring-emerald-500/5 focus:border-emerald-600 outline-none font-bold text-slate-700 transition-all"
-                  placeholder="Código de barras..."
+                  placeholder="Código de barras o nombre..."
                   value={searchTerm}
                   onKeyDown={handleKeyDown}
                   onChange={e => setSearchTerm(e.target.value)}
@@ -152,7 +154,7 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
                         <p className="font-black text-slate-900 group-hover:text-white text-sm uppercase">{p.nombre}</p>
                         <p className="text-[9px] text-slate-400 font-bold group-hover:text-white/70">EAN: {p.codigo_barras}</p>
                       </div>
-                      <span className="text-[10px] font-black bg-slate-100 text-slate-500 px-3 py-1.5 rounded-xl group-hover:bg-emerald-500 group-hover:text-white">STOCK: {p.stock}</span>
+                      <span className="text-[10px] font-black bg-slate-100 text-slate-500 px-3 py-1.5 rounded-xl group-hover:bg-emerald-500 group-hover:text-white">ACTUAL: {p.stock}</span>
                     </button>
                   ))}
                 </div>
@@ -162,10 +164,10 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
             {selectedProduct && (
               <div className="bg-indigo-50/50 rounded-3xl p-8 border border-indigo-100 flex items-center justify-between animate-in zoom-in-95">
                 <div className="space-y-1">
-                  <h4 className="font-black text-indigo-900 uppercase tracking-tight">{selectedProduct.nombre}</h4>
+                  <h4 className="font-black text-indigo-900 uppercase tracking-tight text-lg">{selectedProduct.nombre}</h4>
                   <div className="flex gap-4">
-                    <p className="text-[9px] font-black text-indigo-400 uppercase">Ubicación: {selectedProduct.ubicacion || 'N/A'}</p>
-                    <p className="text-[9px] font-black text-rose-500 uppercase">Vence: {selectedProduct.fecha_vencimiento || 'No registra'}</p>
+                    <p className="text-[9px] font-black text-indigo-400 uppercase">📍 Ubicación: {selectedProduct.ubicacion || 'N/A'}</p>
+                    <p className="text-[9px] font-black text-rose-500 uppercase">📅 Últ. Vence: {selectedProduct.fecha_vencimiento || 'No registra'}</p>
                   </div>
                 </div>
                 <button type="button" onClick={() => setSelectedProduct(null)} className="p-2 text-indigo-300 hover:text-rose-500 transition-colors">
@@ -174,55 +176,78 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
               </div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Proveedor</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Proveedor Autorizado</label>
                 <select
                   required
-                  className="w-full px-4 py-4 rounded-2xl border border-slate-200 bg-slate-50 focus:bg-white outline-none font-bold text-slate-700 transition-all appearance-none cursor-pointer"
+                  className="w-full px-5 py-4 rounded-2xl border border-slate-200 bg-slate-50 focus:bg-white outline-none font-bold text-slate-700 transition-all appearance-none cursor-pointer text-sm"
                   value={formData.proveedor_id}
                   onChange={e => setFormData({...formData, proveedor_id: e.target.value})}
                 >
-                  <option value="">Seleccionar...</option>
+                  <option value="">Seleccionar Proveedor...</option>
                   {providers.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                 </select>
               </div>
+
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Cantidad</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Número de Lote</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ej: LOTE-2024-X"
+                  className="w-full px-5 py-4 rounded-2xl border border-slate-200 bg-slate-50 focus:bg-white outline-none font-bold text-slate-700 text-sm uppercase"
+                  value={formData.lote}
+                  onChange={e => setFormData({...formData, lote: e.target.value})}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Cantidad a Ingresar</label>
                 <input
                   ref={quantityInputRef}
                   type="number"
                   required
                   min="1"
-                  className="w-full px-4 py-4 rounded-2xl border border-slate-200 bg-slate-50 focus:bg-white outline-none font-bold text-slate-700"
+                  className="w-full px-5 py-4 rounded-2xl border border-slate-200 bg-slate-50 focus:bg-white outline-none font-bold text-slate-700 text-sm"
                   value={formData.cantidad}
                   onChange={e => setFormData({...formData, cantidad: Number(e.target.value)})}
                 />
               </div>
+
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Costo Unit. ($)</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Costo Unitario Facturado ($)</label>
                 <input
                   type="number"
                   required
-                  step="100"
-                  className="w-full px-4 py-4 rounded-2xl border border-slate-200 bg-slate-50 focus:bg-white outline-none font-bold text-slate-700"
+                  step="1"
+                  className="w-full px-5 py-4 rounded-2xl border border-slate-200 bg-slate-50 focus:bg-white outline-none font-bold text-slate-700 text-sm"
                   value={formData.costo_unitario || ''}
                   onChange={e => setFormData({...formData, costo_unitario: Number(e.target.value)})}
                 />
               </div>
+
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Fecha Vence Lote</label>
-                <div className="date-input-container">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Fecha Vencimiento Lote</label>
+                <div className="relative">
                   <input
                     type="date"
                     required
-                    className="w-full px-4 py-4 rounded-2xl border border-slate-200 bg-slate-50 focus:bg-white outline-none font-bold text-slate-700 cursor-pointer"
+                    className="w-full px-5 py-4 rounded-2xl border border-slate-200 bg-slate-50 focus:bg-white outline-none font-bold text-slate-700 cursor-pointer text-sm"
                     value={formData.fecha_vencimiento}
                     onChange={e => setFormData({...formData, fecha_vencimiento: e.target.value})}
                     onClick={(e) => { try { (e.target as any).showPicker(); } catch(err) {} }}
-                    onFocus={(e) => { try { (e.target as any).showPicker(); } catch(err) {} }}
                   />
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                  <span className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-300">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                  </span>
+                </div>
+              </div>
+              
+              <div className="flex items-end">
+                <div className="w-full p-4 bg-emerald-50 rounded-2xl border border-emerald-100 flex justify-between items-center h-[56px]">
+                   <span className="text-[9px] font-black text-emerald-600 uppercase tracking-widest">Total Factura:</span>
+                   <span className="text-sm font-black text-emerald-700">${(formData.cantidad * formData.costo_unitario).toLocaleString()}</span>
                 </div>
               </div>
             </div>
@@ -233,12 +258,12 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
             disabled={loading || !selectedProduct}
             className="w-full py-6 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 text-white rounded-[2rem] font-black text-sm uppercase tracking-[0.25em] transition-all shadow-xl shadow-emerald-900/10 active:scale-95 flex items-center justify-center gap-3"
           >
-            {loading ? 'Procesando...' : 'Cargar Entrada a Inventario'}
+            {loading ? 'Procesando...' : 'Confirmar Ingreso de Lote'}
           </button>
           
           {success && (
             <div className="bg-emerald-500 text-white p-5 rounded-2xl text-center text-xs font-black uppercase tracking-[0.3em] animate-in zoom-in">
-              ¡Inventario Sincronizado Exitosamente!
+              ¡Lote Registrado e Inventario Actualizado!
             </div>
           )}
         </form>

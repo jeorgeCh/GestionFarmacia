@@ -66,7 +66,9 @@ export interface Ingreso {
   cantidad: number;
   costo_unitario: number;
   total: number;
+  lote?: string;
   fecha: string;
+  fecha_vencimiento?: string;
   productos?: Producto;
   proveedores?: Proveedor;
   usuarios?: Usuario;
