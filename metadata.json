@@ -1,0 +1,7 @@
+{
+  "name": "Gestion de Farmacia",
+  "description": "Sistema integral de gestión para droguerías con control de inventario, ventas (POS), ingresos de mercancía y gestión de proveedores.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
