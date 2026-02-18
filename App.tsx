@@ -62,15 +62,17 @@ const App: React.FC = () => {
 
   const renderView = () => {
     if (!user) return null;
+    const isAdmin = user.role_id === 1;
+    
     switch (view) {
       case 'dashboard': return <Dashboard user={user} />;
       case 'inventory': return <Inventory user={user} />;
       case 'pos': return <POS user={user} />;
       case 'income': return <Income user={user} />;
-      case 'providers': return <Providers />;
-      case 'discounts': return user.role_id === 1 ? <Discounts /> : <div className="p-12 text-center text-rose-500 font-black uppercase tracking-widest text-xs">Acceso Denegado</div>;
-      case 'analytics': return user.role_id === 1 ? <Analytics /> : <div className="p-12 text-center text-rose-500 font-black uppercase tracking-widest text-xs">Acceso Denegado</div>;
-      case 'timeline': return user.role_id === 1 ? <SalesTimeline /> : <div className="p-12 text-center text-rose-500 font-black uppercase tracking-widest text-xs">Acceso Denegado</div>;
+      case 'providers': return isAdmin ? <Providers /> : <div className="p-12 text-center text-rose-500 font-black uppercase tracking-widest text-xs">Acceso Denegado</div>;
+      case 'discounts': return isAdmin ? <Discounts /> : <div className="p-12 text-center text-rose-500 font-black uppercase tracking-widest text-xs">Acceso Denegado</div>;
+      case 'analytics': return isAdmin ? <Analytics /> : <div className="p-12 text-center text-rose-500 font-black uppercase tracking-widest text-xs">Acceso Denegado</div>;
+      case 'timeline': return isAdmin ? <SalesTimeline /> : <div className="p-12 text-center text-rose-500 font-black uppercase tracking-widest text-xs">Acceso Denegado</div>;
       default: return <Dashboard user={user} />;
     }
   };
@@ -106,7 +108,7 @@ const App: React.FC = () => {
         </div>
       </main>
 
-      {/* Navegación Móvil Mejorada con Scroll Horizontal */}
+      {/* Navegación Móvil Mejorada */}
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 py-3 flex items-center z-40 shadow-[0_-10px_30px_rgba(0,0,0,0.05)] backdrop-blur-md overflow-x-auto custom-scrollbar px-4 gap-6 no-scrollbar">
         <button onClick={() => setView('dashboard')} className={`flex flex-col items-center gap-1 min-w-[50px] transition-all ${view === 'dashboard' ? 'text-slate-900 font-black' : 'text-slate-300'}`}>
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
@@ -130,6 +132,10 @@ const App: React.FC = () => {
 
         {isAdmin && (
            <>
+            <button onClick={() => setView('providers')} className={`flex flex-col items-center gap-1 min-w-[50px] transition-all ${view === 'providers' ? 'text-indigo-600 font-black' : 'text-slate-300'}`}>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+              <span className="text-[7px] uppercase tracking-tighter">Prov</span>
+            </button>
             <button onClick={() => setView('analytics')} className={`flex flex-col items-center gap-1 min-w-[50px] transition-all ${view === 'analytics' ? 'text-indigo-600 font-black' : 'text-slate-300'}`}>
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
               <span className="text-[7px] uppercase tracking-tighter">Balance</span>
