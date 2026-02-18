@@ -12,21 +12,19 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
   const [providers, setProviders] = useState<Proveedor[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<Producto | null>(null);
-  const [recentIncomes, setRecentIncomes] = useState<any[]>([]); // Estado para historial
+  const [recentIncomes, setRecentIncomes] = useState<any[]>([]);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const quantityInputRef = useRef<HTMLInputElement>(null);
   
-  // Cámara
   const [isScanning, setIsScanning] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const scanIntervalRef = useRef<number | null>(null);
 
-  // ESTADO ACTUALIZADO PARA CAJAS Y UNIDADES
   const [formData, setFormData] = useState({
     proveedor_id: '',
-    cantidad_cajas: 1,      // Cuántas cajas llegaron
-    unidades_por_caja: 1,   // Cuántas pastillas/unidades trae cada caja
-    costo_caja: 0,          // Cuánto costó cada caja
+    cantidad_cajas: 1,      
+    unidades_por_caja: 1,   
+    costo_caja: 0,          
     lote: '',
     laboratorio: '',
     fecha_vencimiento: ''
@@ -96,7 +94,6 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
     setIsScanning(false);
   };
 
-  // CÁLCULOS AUTOMÁTICOS
   const totalUnidadesReales = formData.cantidad_cajas * formData.unidades_por_caja;
   const costoTotalCompra = formData.cantidad_cajas * formData.costo_caja;
   const costoUnitarioReal = formData.unidades_por_caja > 0 ? (formData.costo_caja / formData.unidades_por_caja) : 0;
@@ -105,7 +102,14 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
     e.preventDefault();
     setFormError(null);
 
-    // VALIDACIÓN ESTRICTA
+    // VALIDACIÓN DE SESIÓN PARA EVITAR ERROR DE LLAVE FORÁNEA
+    const userId = Number(user?.id);
+    if (!userId) {
+      alert("Sesión inválida. Vuelve a iniciar sesión.");
+      window.location.reload();
+      return;
+    }
+
     if (!selectedProduct || !formData.proveedor_id || !formData.lote.trim() || !formData.fecha_vencimiento) {
       setFormError("⚠️ FALTAN DATOS: Revisa Proveedor, Lote y Vencimiento.");
       return;
@@ -119,10 +123,10 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
     setLoading(true);
     try {
       const { error: incomeError } = await supabase.from('ingresos').insert({
-        usuario_id: user.id,
+        usuario_id: userId, // Usar el ID casteado
         producto_id: selectedProduct.id,
         proveedor_id: Number(formData.proveedor_id),
-        cantidad: totalUnidadesReales, // Guardamos el total de unidades sueltas para el stock
+        cantidad: totalUnidadesReales, 
         costo_unitario: costoUnitarioReal, 
         total: costoTotalCompra,
         lote: formData.lote.trim().toUpperCase(),
@@ -132,22 +136,18 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
       if (incomeError) throw incomeError;
 
       const updatePayload: any = {};
-      
-      // Actualizamos datos del producto si cambiaron
       if (formData.fecha_vencimiento && formData.fecha_vencimiento !== (selectedProduct.fecha_vencimiento?.split('T')[0])) {
         updatePayload.fecha_vencimiento = formData.fecha_vencimiento;
       }
       if (formData.laboratorio && formData.laboratorio.trim().toUpperCase() !== selectedProduct.laboratorio) {
         updatePayload.laboratorio = formData.laboratorio.trim().toUpperCase();
       }
-      // Actualizamos la configuración de unidades por caja del producto maestro
       updatePayload.unidades_por_caja = formData.unidades_por_caja;
       
       if (Object.keys(updatePayload).length > 0) {
         await supabase.from('productos').update(updatePayload).eq('id', selectedProduct.id);
       }
       
-      // Stock aumenta (se pasa negativo a deduct_stock para sumar)
       await supabase.rpc('deduct_stock', { p_id: selectedProduct.id, p_qty: -totalUnidadesReales });
 
       setSuccess(true);
@@ -162,9 +162,10 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
       });
       setSelectedProduct(null);
       setSearchTerm('');
-      fetchData(); // Refresca lista de productos y el historial
+      fetchData(); 
       setTimeout(() => setSuccess(false), 3000);
     } catch (err: any) {
+      console.error("Error en ingreso:", err);
       setFormError(err.message || "Error al procesar ingreso");
     } finally {
       setLoading(false);
@@ -181,7 +182,6 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
   const handleSelectProduct = (p: Producto) => {
     setSelectedProduct(p);
     setSearchTerm('');
-    // Al seleccionar, precargamos unidades_por_caja si ya existe
     setFormData({ 
       proveedor_id: '', 
       cantidad_cajas: 1, 
@@ -196,230 +196,72 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
 
   return (
     <div className="max-w-6xl mx-auto space-y-8 animate-slide-up pb-10 px-4 md:px-0">
-      
-      {/* Header Limpio */}
       <div className="flex flex-col md:flex-row justify-between items-end gap-4 mb-2">
         <div>
           <h2 className="text-3xl font-black text-slate-900 tracking-tight uppercase">Entrada de Mercancía</h2>
           <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mt-1">Gestión de Lotes y Costos</p>
         </div>
-        <div className="bg-emerald-50 text-emerald-600 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border border-emerald-100 shadow-sm">
-          Sistema de Ingresos
-        </div>
+        <div className="bg-emerald-50 text-emerald-600 px-4 py-2 rounded-xl text-[10px] font-black uppercase border border-emerald-100 shadow-sm">Sistema de Ingresos</div>
       </div>
-        
-      <div className="bg-white rounded-[3.5rem] shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden">
+      <div className="bg-white rounded-[3.5rem] shadow-xl border border-slate-100 overflow-hidden">
         <div className="p-8 lg:p-12">
           {formError && <div className="mb-6 p-4 bg-rose-50 border border-rose-100 text-rose-600 rounded-2xl text-[10px] font-black uppercase text-center animate-bounce">{formError}</div>}
-          
           {!selectedProduct ? (
             <div className="space-y-6">
               <div className="relative">
                 <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-3 block">Buscar Medicamento</label>
                 <div className="relative group">
-                  <input
-                    ref={searchInputRef}
-                    type="text"
-                    className="w-full pl-14 pr-20 py-6 rounded-[2.5rem] border-2 border-slate-100 bg-slate-50 outline-none font-bold text-lg uppercase focus:bg-white focus:border-indigo-600 transition-all shadow-inner text-slate-900 placeholder:text-slate-300"
-                    placeholder="Escanea o escribe nombre..."
-                    value={searchTerm}
-                    onChange={e => setSearchTerm(e.target.value)}
-                  />
-                  <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400">
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-                  </div>
-                  <button onClick={startScanner} className="absolute right-4 top-1/2 -translate-y-1/2 bg-slate-900 text-white w-12 h-12 rounded-2xl flex items-center justify-center hover:bg-emerald-600 transition-all shadow-lg hover:shadow-emerald-500/30">
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 14.5v-3.5m0 0v-1m0 1h.01m5-5.3a1.9 1.9 0 00-2.66 0 1.9 1.9 0 00-2.66 0m-4.24 0a1.9 1.9 0 012.66 0 1.9 1.9 0 012.66 0"/></svg>
-                  </button>
+                  <input ref={searchInputRef} type="text" className="w-full pl-14 pr-20 py-6 rounded-[2.5rem] border-2 border-slate-100 bg-slate-50 outline-none font-bold text-lg uppercase focus:bg-white focus:border-indigo-600 shadow-inner text-slate-900 placeholder:text-slate-300" placeholder="Escanea o escribe nombre..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                  <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg></div>
+                  <button onClick={startScanner} className="absolute right-4 top-1/2 -translate-y-1/2 bg-slate-900 text-white w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 14.5v-3.5m0 0v-1m0 1h.01m5-5.3a1.9 1.9 0 00-2.66 0 1.9 1.9 0 00-2.66 0m-4.24 0a1.9 1.9 0 012.66 0 1.9 1.9 0 012.66 0"/></svg></button>
                 </div>
               </div>
-
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {filteredProducts.map((p) => (
-                  <button key={p.id} onClick={() => handleSelectProduct(p)} className="flex flex-col text-left p-6 rounded-[2.2rem] border-2 border-slate-50 bg-white shadow-sm hover:border-indigo-600 hover:shadow-xl hover:shadow-indigo-500/10 transition-all group active:scale-95">
+                  <button key={p.id} onClick={() => handleSelectProduct(p)} className="flex flex-col text-left p-6 rounded-[2.2rem] border-2 border-slate-50 bg-white shadow-sm hover:border-indigo-600 transition-all group active:scale-95">
                     <p className="font-black uppercase text-sm text-slate-800 group-hover:text-indigo-600 truncate">{p.nombre}</p>
                     <p className="text-[9px] font-black text-slate-400 uppercase mt-1 tracking-widest">{p.laboratorio || 'S/L'}</p>
-                    <div className="mt-4 pt-4 border-t border-slate-50 flex justify-between w-full">
-                       <span className="text-[9px] font-black text-slate-400 uppercase tracking-tight">Stock actual</span>
-                       <span className="text-[11px] font-black text-slate-900 bg-slate-100 px-2 py-0.5 rounded-lg">{p.stock}</span>
-                    </div>
+                    <div className="mt-4 pt-4 border-t border-slate-50 flex justify-between w-full"><span className="text-[9px] font-black text-slate-400 uppercase">Stock actual</span><span className="text-[11px] font-black text-slate-900 bg-slate-100 px-2 py-0.5 rounded-lg">{p.stock}</span></div>
                   </button>
                 ))}
               </div>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-8 animate-in slide-in-from-bottom-6">
-              
-              {/* Product Info Card */}
-              <div className="bg-slate-50/50 p-6 rounded-[2.5rem] border border-slate-100 flex flex-col md:flex-row justify-between items-center gap-6">
+              <div className="bg-slate-50 p-6 rounded-[2.5rem] border border-slate-100 flex flex-col md:flex-row justify-between items-center gap-6">
                  <div className="flex items-center gap-4">
-                   <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-indigo-600 shadow-sm border border-slate-100">
-                     <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
-                   </div>
-                   <div>
-                     <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Cargando Stock Para:</span>
-                     <h3 className="text-xl lg:text-2xl font-black uppercase tracking-tight text-slate-900 leading-none">{selectedProduct.nombre}</h3>
-                   </div>
+                   <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-indigo-600 shadow-sm"><svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg></div>
+                   <div><span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Cargando Stock Para:</span><h3 className="text-xl lg:text-2xl font-black uppercase text-slate-900 leading-none">{selectedProduct.nombre}</h3></div>
                  </div>
-                 <button type="button" onClick={() => setSelectedProduct(null)} className="px-6 py-3 bg-white text-slate-500 rounded-xl font-black text-[10px] uppercase hover:bg-rose-50 hover:text-rose-500 transition-all border border-slate-200 hover:border-rose-200">Cambiar Producto</button>
+                 <button type="button" onClick={() => setSelectedProduct(null)} className="px-6 py-3 bg-white text-slate-500 rounded-xl font-black text-[10px] uppercase border border-slate-200">Cambiar Producto</button>
               </div>
-
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                  <div className="space-y-2">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Proveedor *</label>
-                    <div className="relative">
-                      <select required className="w-full px-6 py-4 rounded-2xl border-2 border-slate-100 bg-white font-bold text-slate-700 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-500/10 outline-none appearance-none transition-all" value={formData.proveedor_id} onChange={e => setFormData({...formData, proveedor_id: e.target.value})}>
+                    <select required className="w-full px-6 py-4 rounded-2xl border-2 border-slate-100 bg-white font-bold text-slate-700 outline-none" value={formData.proveedor_id} onChange={e => setFormData({...formData, proveedor_id: e.target.value})}>
                         <option value="">Seleccionar Proveedor...</option>
                         {providers.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                      </select>
-                      <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"/></svg>
-                      </div>
-                    </div>
+                    </select>
                  </div>
-
-                 <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Identificador de Lote *</label>
-                    <input type="text" required className="w-full px-6 py-4 rounded-2xl border-2 border-slate-100 bg-white font-black uppercase text-slate-900 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-500/10 outline-none placeholder:text-slate-300 transition-all" placeholder="EJ: L-9088" value={formData.lote} onChange={e => setFormData({...formData, lote: e.target.value})} />
-                 </div>
-
-                 <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Fecha de Vencimiento *</label>
-                    <input type="date" required className="w-full px-6 py-4 rounded-2xl border-2 border-slate-100 bg-white font-bold text-slate-700 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all" value={formData.fecha_vencimiento} onChange={e => setFormData({...formData, fecha_vencimiento: e.target.value})} />
-                 </div>
-
-                 {/* NUEVOS CAMPOS PARA CAJAS */}
-                 <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Cantidad de Cajas *</label>
-                    <input ref={quantityInputRef} type="number" required min="1" className="w-full px-6 py-4 rounded-2xl border-2 border-slate-100 bg-white font-black text-xl text-slate-900 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all" placeholder="0" value={formData.cantidad_cajas} onChange={e => setFormData({...formData, cantidad_cajas: Number(e.target.value)})} />
-                 </div>
-
-                 <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Unidades por Caja *</label>
-                    <input type="number" required min="1" className="w-full px-6 py-4 rounded-2xl border-2 border-slate-100 bg-white font-black text-xl text-slate-900 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all" placeholder="1" value={formData.unidades_por_caja} onChange={e => setFormData({...formData, unidades_por_caja: Number(e.target.value)})} />
-                 </div>
-
-                 <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Costo por Caja ($) *</label>
-                    <input type="number" required step="0.01" className="w-full px-6 py-4 rounded-2xl border-2 border-slate-100 bg-white font-black text-xl text-slate-900 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all" placeholder="0.00" value={formData.costo_caja} onChange={e => setFormData({...formData, costo_caja: Number(e.target.value)})} />
-                 </div>
-
-                 <div className="md:col-span-3 space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Lab / Fabricante (Opcional)</label>
-                    <input type="text" className="w-full px-6 py-4 rounded-2xl border-2 border-slate-100 bg-white font-black uppercase text-slate-700 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-500/10 outline-none placeholder:text-slate-300 transition-all" value={formData.laboratorio} onChange={e => setFormData({...formData, laboratorio: e.target.value})} />
-                 </div>
+                 <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Identificador de Lote *</label><input type="text" required className="w-full px-6 py-4 rounded-2xl border-2 border-slate-100 bg-white font-black uppercase text-slate-900 focus:border-indigo-600 outline-none" placeholder="EJ: L-9088" value={formData.lote} onChange={e => setFormData({...formData, lote: e.target.value})} /></div>
+                 <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Vencimiento *</label><input type="date" required className="w-full px-6 py-4 rounded-2xl border-2 border-slate-100 bg-white font-bold text-slate-700 focus:border-indigo-600 outline-none" value={formData.fecha_vencimiento} onChange={e => setFormData({...formData, fecha_vencimiento: e.target.value})} /></div>
+                 <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Cajas *</label><input ref={quantityInputRef} type="number" required min="1" className="w-full px-6 py-4 rounded-2xl border-2 border-slate-100 bg-white font-black text-xl outline-none" value={formData.cantidad_cajas} onChange={e => setFormData({...formData, cantidad_cajas: Number(e.target.value)})} /></div>
+                 <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Uds x Caja *</label><input type="number" required min="1" className="w-full px-6 py-4 rounded-2xl border-2 border-slate-100 bg-white font-black text-xl outline-none" value={formData.unidades_por_caja} onChange={e => setFormData({...formData, unidades_por_caja: Number(e.target.value)})} /></div>
+                 <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Costo Caja ($) *</label><input type="number" required step="0.01" className="w-full px-6 py-4 rounded-2xl border-2 border-slate-100 bg-white font-black text-xl outline-none" value={formData.costo_caja} onChange={e => setFormData({...formData, costo_caja: Number(e.target.value)})} /></div>
               </div>
-
-              {/* Resumen de Costos CALCULADO */}
-              <div className="bg-slate-900 rounded-[2.5rem] p-8 flex flex-col lg:flex-row justify-between items-center gap-8 shadow-xl shadow-slate-900/20">
-                 <div className="flex flex-col sm:flex-row items-center gap-8 w-full lg:w-auto text-white text-center sm:text-left">
-                    <div>
-                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Costo Unitario (Pastilla)</p>
-                       <p className="text-xl font-black tracking-tight text-white">${costoUnitarioReal.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
-                    </div>
+              <div className="bg-slate-900 rounded-[2.5rem] p-8 flex flex-col lg:flex-row justify-between items-center gap-8 shadow-xl">
+                 <div className="flex flex-col sm:flex-row items-center gap-8 text-white text-center sm:text-left">
+                    <div><p className="text-[10px] font-black text-slate-400 uppercase mb-1">Costo Unidad</p><p className="text-xl font-black">${costoUnitarioReal.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p></div>
                     <div className="h-10 w-px bg-slate-700 hidden sm:block"></div>
-                     <div>
-                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Unidades a Ingresar</p>
-                       <p className="text-xl font-black tracking-tight text-white">{totalUnidadesReales}</p>
-                    </div>
-                    <div className="h-10 w-px bg-slate-700 hidden sm:block"></div>
-                    <div>
-                       <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-1">Costo Total Factura</p>
-                       <p className="text-3xl font-black text-emerald-400 tracking-tighter">${costoTotalCompra.toLocaleString()}</p>
-                    </div>
+                    <div><p className="text-[10px] font-black text-emerald-400 uppercase mb-1">Total Factura</p><p className="text-3xl font-black text-emerald-400 tracking-tighter">${costoTotalCompra.toLocaleString()}</p></div>
                  </div>
-
-                 <button type="submit" disabled={loading} className="w-full lg:w-auto px-16 py-5 bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-lg shadow-emerald-900/30 hover:bg-emerald-500 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2">
-                   {loading ? (
-                     <>
-                       <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                       <span>Guardando...</span>
-                     </>
-                   ) : (
-                     'Confirmar Ingreso'
-                   )}
-                 </button>
+                 <button type="submit" disabled={loading} className="w-full lg:w-auto px-16 py-5 bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg hover:bg-emerald-500 transition-all active:scale-95 disabled:opacity-50">{loading ? 'Guardando...' : 'Confirmar Ingreso'}</button>
               </div>
             </form>
           )}
-
-          {isScanning && (
-            <div className="fixed inset-0 z-[200] bg-slate-950/95 flex flex-col items-center justify-center p-6 animate-in fade-in">
-              <div className="w-full max-w-lg aspect-square relative rounded-[4rem] overflow-hidden border-4 border-emerald-500/30">
-                 <video ref={videoRef} className="w-full h-full object-cover" />
-                 <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="w-64 h-64 border-2 border-emerald-500 rounded-[3rem] relative shadow-[0_0_0_1000px_rgba(0,0,0,0.6)]">
-                       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-1 bg-emerald-500 animate-scan shadow-[0_0_20px_#10b981]"></div>
-                    </div>
-                 </div>
-              </div>
-              <button onClick={stopScanner} className="mt-10 bg-white text-slate-900 px-12 py-5 rounded-full font-black text-xs uppercase tracking-widest hover:bg-rose-500 hover:text-white transition-all">Detener Escaneo</button>
-              <style>{`@keyframes scan { 0% { top: 0; } 100% { top: 100%; } } .animate-scan { position: absolute; animation: scan 2s infinite ease-in-out; }`}</style>
-            </div>
-          )}
-
-          {success && (
-            <div className="fixed bottom-10 right-10 bg-emerald-600 text-white px-8 py-5 rounded-3xl font-black uppercase shadow-2xl animate-in slide-in-from-bottom-10 z-50 flex items-center gap-4">
-              <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">✓</div>
-              ¡Stock actualizado correctamente!
-            </div>
-          )}
+          {success && <div className="fixed bottom-10 right-10 bg-emerald-600 text-white px-8 py-5 rounded-3xl font-black uppercase shadow-2xl animate-in slide-in-from-bottom-10 z-50">¡Stock actualizado correctamente!</div>}
         </div>
       </div>
-      
-      {/* HISTORIAL DE INGRESOS */}
-      {!selectedProduct && recentIncomes.length > 0 && (
-        <div className="mt-12">
-           <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight mb-6 px-4">Historial de Ingresos Recientes</h3>
-           <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
-             <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                   <thead>
-                      <tr className="bg-slate-50 border-b border-slate-100">
-                         <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Fecha</th>
-                         <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Producto</th>
-                         <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Lote</th>
-                         <th className="px-8 py-5 text-[10px] font-black text-emerald-600 uppercase tracking-widest text-center">Cajas Ingresadas</th>
-                         <th className="px-8 py-5 text-[10px] font-black text-indigo-600 uppercase tracking-widest text-right">Total Unidades</th>
-                      </tr>
-                   </thead>
-                   <tbody className="divide-y divide-slate-50">
-                      {recentIncomes.map((income) => {
-                         const unitsPerBox = income.productos?.unidades_por_caja || 1;
-                         // Calculamos cajas basado en la configuración actual del producto
-                         const boxes = (income.cantidad / unitsPerBox);
-                         const isExact = Number.isInteger(boxes);
-                         
-                         return (
-                            <tr key={income.id} className="hover:bg-slate-50/50">
-                               <td className="px-8 py-4">
-                                  <p className="text-xs font-bold text-slate-600">{new Date(income.fecha).toLocaleDateString()}</p>
-                                  <p className="text-[9px] font-bold text-slate-400 uppercase">{new Date(income.fecha).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
-                               </td>
-                               <td className="px-8 py-4">
-                                  <p className="text-sm font-black text-slate-900 uppercase">{income.productos?.nombre || 'Producto Eliminado'}</p>
-                                  <p className="text-[9px] font-bold text-slate-400 uppercase">{income.proveedores?.nombre || 'Proveedor Eliminado'}</p>
-                               </td>
-                               <td className="px-8 py-4">
-                                  <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest">{income.lote}</span>
-                               </td>
-                               <td className="px-8 py-4 text-center">
-                                  <div className="inline-block bg-emerald-50 text-emerald-700 border border-emerald-100 px-3 py-1 rounded-xl text-xs font-black">
-                                     {isExact ? boxes : boxes.toFixed(1)} Cajas
-                                  </div>
-                               </td>
-                               <td className="px-8 py-4 text-right">
-                                  <p className="text-sm font-black text-indigo-900">{income.cantidad}</p>
-                               </td>
-                            </tr>
-                         );
-                      })}
-                   </tbody>
-                </table>
-             </div>
-           </div>
-        </div>
-      )}
     </div>
   );
 };

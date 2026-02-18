@@ -54,7 +54,6 @@ const POS: React.FC<POSProps> = ({ user }) => {
       if (productsData) {
         const mergedProducts = productsData.map(p => ({
           ...p,
-          // Aseguramos que unidades_por_caja tenga un valor mínimo de 1 para evitar divisiones por cero
           unidades_por_caja: p.unidades_por_caja || 1, 
           descuentos: discountsData?.filter(d => d.producto_id === p.id) || []
         }));
@@ -64,7 +63,6 @@ const POS: React.FC<POSProps> = ({ user }) => {
         setSaleModes(prev => {
           const next = { ...prev };
           mergedProducts.forEach(p => {
-            // Por defecto caja si tiene, si no unidad
             if (!next[p.id]) next[p.id] = 'caja';
           });
           return next;
@@ -111,7 +109,6 @@ const POS: React.FC<POSProps> = ({ user }) => {
     setIsScanning(false);
   };
 
-  // Calcula cuántas unidades de este producto ya están "comprometidas" en el carrito
   const getReservedUnits = (productId: number) => {
     return cart
       .filter(item => item.product.id === productId)
@@ -130,7 +127,6 @@ const POS: React.FC<POSProps> = ({ user }) => {
     const mode = product.tipo === 'pastillas' ? (saleModes[product.id] || 'caja') : 'caja';
     const unitsPerBox = product.unidades_por_caja || 1;
     
-    // Validar Stock Disponible
     const currentReserved = getReservedUnits(product.id);
     const quantityToDeduct = mode === 'caja' ? unitsPerBox : 1;
     
@@ -149,7 +145,6 @@ const POS: React.FC<POSProps> = ({ user }) => {
     const existingIndex = cart.findIndex(item => item.product.id === product.id && item.saleMode === mode);
     
     if (existingIndex >= 0) {
-       // Actualizar cantidad existente
        const newCart = [...cart];
        newCart[existingIndex].cantidad += 1;
        setCart(newCart);
@@ -178,11 +173,9 @@ const POS: React.FC<POSProps> = ({ user }) => {
             return prev.filter((_, i) => i !== itemIndex);
         }
 
-        // Validación de Stock al incrementar
         if (delta > 0) {
              const product = currentItem.product;
              const unitsNeeded = (mode === 'caja' ? currentItem.unitsPerBox : 1);
-             // Calcular todo lo reservado EXCLUYENDO la cantidad actual de ESTE item para recalcular con el nuevo valor
              const otherReserved = prev
                 .filter((i, idx) => idx !== itemIndex && i.product.id === productId)
                 .reduce((acc, i) => acc + (i.cantidad * (i.saleMode === 'caja' ? i.unitsPerBox : 1)), 0);
@@ -210,6 +203,15 @@ const POS: React.FC<POSProps> = ({ user }) => {
 
   const handleCheckout = async () => {
     if (cart.length === 0 || processing) return;
+    
+    // VALIDACIÓN DE USUARIO PARA EVITAR ERROR DE LLAVE FORÁNEA
+    const userId = Number(user?.id);
+    if (!userId) {
+      alert("Sesión inválida. Por favor, vuelve a iniciar sesión.");
+      window.location.reload();
+      return;
+    }
+
     if (paymentMethod === 'efectivo' && (!cashReceived || Number(cashReceived) < totalAmount)) {
       alert("Monto recibido insuficiente");
       return;
@@ -219,7 +221,7 @@ const POS: React.FC<POSProps> = ({ user }) => {
     try {
       const transactionId = crypto.randomUUID();
       const salesToInsert = cart.map(item => ({
-        usuario_id: user.id,
+        usuario_id: userId, // Usar el ID casteado
         producto_id: item.product.id,
         cantidad: item.cantidad,
         total: item.finalPrice * item.cantidad,
@@ -233,7 +235,6 @@ const POS: React.FC<POSProps> = ({ user }) => {
       const { error: saleError } = await supabase.from('ventas').insert(salesToInsert);
       if (saleError) throw saleError;
 
-      // Descontar del inventario (unidades atómicas)
       for (const item of cart) {
         const qtyToDeduct = item.cantidad * (item.saleMode === 'caja' ? item.unitsPerBox : 1);
         await supabase.rpc('deduct_stock', { p_id: item.product.id, p_qty: qtyToDeduct });
@@ -252,7 +253,8 @@ const POS: React.FC<POSProps> = ({ user }) => {
       setCashReceived('');
       fetchProducts();
     } catch (err: any) {
-      alert("Error: " + err.message);
+      console.error("Error en venta:", err);
+      alert("Error al procesar la venta. Inténtalo de nuevo.");
     } finally {
       setProcessing(false);
     }
@@ -288,18 +290,11 @@ const POS: React.FC<POSProps> = ({ user }) => {
             {filteredProducts.map(product => {
               const mode = saleModes[product.id] || 'caja';
               const unitsPerBox = product.unidades_por_caja || 1;
-              
-              // Calcular Stock Real Disponible (Total - En Carrito)
               const reserved = getReservedUnits(product.id);
               const effectiveStock = Math.max(0, product.stock - reserved);
-              
               const boxesAvailable = Math.floor(effectiveStock / unitsPerBox);
               const unitsAvailable = effectiveStock % unitsPerBox;
-
-              const basePrice = mode === 'unidad' 
-                ? (Number(product.precio_unidad) || 0)
-                : (Number(product.precio) || 0);
-                
+              const basePrice = mode === 'unidad' ? (Number(product.precio_unidad) || 0) : (Number(product.precio) || 0);
               const discountPercent = getDiscountPercentage(product);
               const finalPrice = basePrice * (1 - discountPercent / 100);
 
@@ -310,47 +305,25 @@ const POS: React.FC<POSProps> = ({ user }) => {
                       -{Math.round(discountPercent)}%
                     </div>
                   )}
-
                   <div>
                     <h4 className="font-black text-slate-900 text-xs uppercase leading-tight pr-2 mb-1 truncate">{product.nombre}</h4>
-                    
-                    <p className="text-[9px] text-slate-400 font-medium mb-2 line-clamp-2 leading-relaxed lowercase first-letter:uppercase">
-                      {product.descripcion || 'Sin descripción detallada'}
-                    </p>
-                    
+                    <p className="text-[9px] text-slate-400 font-medium mb-2 line-clamp-2 leading-relaxed lowercase first-letter:uppercase">{product.descripcion || 'Sin descripción detallada'}</p>
                     <div className="flex flex-wrap items-center gap-2 mb-3">
-                       <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded-lg text-[8px] font-black uppercase whitespace-nowrap border border-indigo-100">{product.laboratorio || 'S/L'}</span>
-                       <div className="flex items-center gap-1.5 px-2 py-0.5 bg-slate-50 border border-slate-100 rounded-lg">
-                          <span className="text-[8px] font-black text-slate-600 uppercase tracking-tight">📍 {product.ubicacion || '---'}</span>
-                       </div>
+                       <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded-lg text-[8px] font-black uppercase border border-indigo-100">{product.laboratorio || 'S/L'}</span>
+                       <span className="text-[8px] font-black text-slate-600 uppercase tracking-tight px-2 py-0.5 bg-slate-50 border border-slate-100 rounded-lg">📍 {product.ubicacion || '---'}</span>
                     </div>
-
                     <div className={`flex items-center gap-2 mb-3 p-2 rounded-xl border ${effectiveStock <= (unitsPerBox * 2) ? 'bg-rose-50 border-rose-100' : 'bg-slate-50 border-slate-100'}`}>
                        <span className={`w-2 h-2 rounded-full ${effectiveStock < (unitsPerBox * 2) ? 'bg-rose-500 animate-pulse' : 'bg-emerald-500'}`}></span>
                        <div className="flex flex-col w-full">
-                          <div className="flex justify-between items-center w-full">
-                             <p className="text-[9px] font-black text-slate-600 uppercase tracking-tight">
-                               Disp: {effectiveStock} Unid
-                             </p>
-                             {product.tipo === 'pastillas' && (
-                                <span className="text-[8px] font-bold text-indigo-500 uppercase">
-                                   (1 Caja = {unitsPerBox}u)
-                                </span>
-                             )}
-                          </div>
+                          <p className="text-[9px] font-black text-slate-600 uppercase tracking-tight">Disp: {effectiveStock} Unid</p>
                           {product.tipo === 'pastillas' ? (
-                             <p className="text-[10px] font-black text-slate-800 uppercase tracking-tight mt-0.5">
-                               {boxesAvailable} Cajas / {unitsAvailable} Unid
-                             </p>
+                             <p className="text-[10px] font-black text-slate-800 uppercase tracking-tight mt-0.5">{boxesAvailable} Cajas / {unitsAvailable} Unid</p>
                           ) : (
-                             <div className="h-1 bg-slate-200 rounded-full mt-1 overflow-hidden w-full">
-                                <div className="h-full bg-emerald-500" style={{ width: `${Math.min(100, (effectiveStock / 50) * 100)}%` }}></div>
-                             </div>
+                             <div className="h-1 bg-slate-200 rounded-full mt-1 overflow-hidden w-full"><div className="h-full bg-emerald-500" style={{ width: `${Math.min(100, (effectiveStock / 50) * 100)}%` }}></div></div>
                           )}
                        </div>
                     </div>
                   </div>
-
                   <div>
                     <div className="flex items-center justify-between mb-3 bg-slate-50 p-3 rounded-xl border border-slate-100/50">
                       <div className="flex flex-col">
@@ -360,27 +333,17 @@ const POS: React.FC<POSProps> = ({ user }) => {
                             <p className="font-black text-emerald-600 text-lg tracking-tighter leading-none">${finalPrice.toLocaleString()}</p>
                           </>
                         ) : (
-                          <>
-                            <span className="text-[8px] text-slate-400 font-bold uppercase tracking-wide">Precio</span>
-                            <p className="font-black text-slate-900 text-lg tracking-tighter leading-none">${basePrice.toLocaleString()}</p>
-                          </>
+                          <p className="font-black text-slate-900 text-lg tracking-tighter leading-none">${basePrice.toLocaleString()}</p>
                         )}
                       </div>
-                      
                       {product.tipo === 'pastillas' && (
                         <div className="flex bg-white rounded-lg p-1 border border-slate-200 shadow-inner h-fit">
-                          <button onClick={() => setSaleModes({...saleModes, [product.id]: 'caja'})} className={`px-2 py-1 rounded-md text-[8px] font-black uppercase transition-all ${mode === 'caja' ? 'bg-slate-900 text-white shadow-md' : 'text-slate-400'}`}>Caja</button>
-                          <button onClick={() => setSaleModes({...saleModes, [product.id]: 'unidad'})} className={`px-2 py-1 rounded-md text-[8px] font-black uppercase transition-all ${mode === 'unidad' ? 'bg-slate-900 text-white shadow-md' : 'text-slate-400'}`}>Unid</button>
+                          <button onClick={() => setSaleModes({...saleModes, [product.id]: 'caja'})} className={`px-2 py-1 rounded-md text-[8px] font-black uppercase ${mode === 'caja' ? 'bg-slate-900 text-white' : 'text-slate-400'}`}>Caja</button>
+                          <button onClick={() => setSaleModes({...saleModes, [product.id]: 'unidad'})} className={`px-2 py-1 rounded-md text-[8px] font-black uppercase ${mode === 'unidad' ? 'bg-slate-900 text-white' : 'text-slate-400'}`}>Unid</button>
                         </div>
                       )}
                     </div>
-                    <button 
-                      onClick={() => addToCart(product)} 
-                      disabled={effectiveStock <= 0}
-                      className="w-full py-3 bg-slate-950 text-white rounded-xl text-[9px] font-black uppercase hover:bg-emerald-600 active:scale-95 transition-all shadow-lg disabled:opacity-50 disabled:active:scale-100"
-                    >
-                      {effectiveStock > 0 ? '+ Agregar' : 'Agotado'}
-                    </button>
+                    <button onClick={() => addToCart(product)} disabled={effectiveStock <= 0} className="w-full py-3 bg-slate-950 text-white rounded-xl text-[9px] font-black uppercase hover:bg-emerald-600 active:scale-95 transition-all shadow-lg disabled:opacity-50">{effectiveStock > 0 ? '+ Agregar' : 'Agotado'}</button>
                   </div>
                 </div>
               );
@@ -388,28 +351,20 @@ const POS: React.FC<POSProps> = ({ user }) => {
           </div>
         </div>
 
-        {/* PANEL DERECHO: CARRITO Y PAGO - ESTRUCTURA FIJA */}
+        {/* PANEL DERECHO: CARRITO Y PAGO */}
         <div className="lg:col-span-5 flex flex-col bg-white lg:rounded-[2.5rem] shadow-xl border border-slate-100 overflow-hidden h-full rounded-t-[2.5rem] mt-4 lg:mt-0">
-          
-          {/* HEADER CON TOTAL GRANDE PARA AHORRAR ESPACIO ABAJO */}
           <div className="p-5 bg-slate-900 text-white shrink-0 flex flex-col gap-4">
             <div className="flex justify-between items-start">
               <div>
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total a Pagar</span>
                 <p className="text-4xl font-black text-white tracking-tighter leading-none mt-1">${totalAmount.toLocaleString()}</p>
               </div>
-               <div className="flex flex-col items-end gap-2">
-                 <span className="bg-emerald-500/20 text-emerald-300 px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border border-emerald-500/30">
-                    {cart.length} Items
-                 </span>
-                 <button onClick={() => setCart([])} className="text-rose-400 hover:text-white text-[9px] font-black uppercase tracking-widest hover:underline">
-                    Vaciar
-                 </button>
-               </div>
+              <div className="flex flex-col items-end gap-2">
+                 <span className="bg-emerald-500/20 text-emerald-300 px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border border-emerald-500/30">{cart.length} Items</span>
+                 <button onClick={() => setCart([])} className="text-rose-400 hover:text-white text-[9px] font-black uppercase tracking-widest hover:underline">Vaciar</button>
+              </div>
             </div>
           </div>
-
-          {/* LISTA DE ITEMS */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/50 custom-scrollbar">
             {cart.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center opacity-20 py-10">
@@ -420,159 +375,70 @@ const POS: React.FC<POSProps> = ({ user }) => {
               <div key={idx} className="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between animate-in slide-in-from-right-4">
                 <div className="flex-1 min-w-0 pr-3">
                   <h5 className="font-black text-slate-900 text-[11px] uppercase truncate leading-none mb-1">{item.product.nombre}</h5>
-                  <div className="flex items-center gap-2 mt-0.5">
-                     {item.discountApplied > 0 ? (
-                        <div className="flex items-baseline gap-1.5">
-                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-tight">{item.saleMode}</span>
-                            <span className="text-[9px] text-slate-400 line-through font-bold decoration-rose-400">${item.originalPrice.toLocaleString()}</span>
-                            <span className="text-[10px] text-emerald-600 font-black">${item.finalPrice.toLocaleString()}</span>
-                        </div>
-                     ) : (
-                        <p className="text-[10px] text-indigo-600 font-black uppercase tracking-tight">{item.saleMode} • ${item.finalPrice.toLocaleString()}</p>
-                     )}
-                     {item.discountApplied > 0 && (
-                      <span className="bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded text-[7px] font-black uppercase tracking-tighter border border-rose-200">
-                        -{Math.round(item.discountApplied)}%
-                      </span>
-                    )}
-                  </div>
+                  <p className="text-[10px] text-indigo-600 font-black uppercase tracking-tight">{item.saleMode} • ${item.finalPrice.toLocaleString()}</p>
                 </div>
-                
                 <div className="flex items-center gap-2">
                    <div className="flex items-center bg-slate-100 rounded-lg p-0.5 px-1 border border-slate-200">
-                       <button onClick={() => updateQuantity(item.product.id, item.saleMode, -1)} className="w-5 h-5 flex items-center justify-center text-slate-500 font-black hover:text-rose-600"> - </button>
+                       <button onClick={() => updateQuantity(item.product.id, item.saleMode, -1)} className="w-5 h-5 flex items-center justify-center text-slate-500 font-black"> - </button>
                        <span className="w-5 text-center font-black text-slate-900 text-xs">{item.cantidad}</span>
-                       <button onClick={() => updateQuantity(item.product.id, item.saleMode, 1)} className="w-5 h-5 flex items-center justify-center text-slate-500 font-black hover:text-emerald-600"> + </button>
+                       <button onClick={() => updateQuantity(item.product.id, item.saleMode, 1)} className="w-5 h-5 flex items-center justify-center text-slate-500 font-black"> + </button>
                    </div>
-                   <button onClick={() => removeFromCart(item.product.id, item.saleMode)} className="w-6 h-6 flex items-center justify-center text-rose-400 hover:text-rose-600 bg-rose-50 rounded-lg">
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12"/></svg>
-                   </button>
+                   <button onClick={() => removeFromCart(item.product.id, item.saleMode)} className="w-6 h-6 flex items-center justify-center text-rose-400 bg-rose-50 rounded-lg"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12"/></svg></button>
                 </div>
               </div>
             ))}
           </div>
-
-          {/* ÁREA DE PAGO COMPACTA */}
-          <div className="p-4 bg-white border-t border-slate-100 space-y-3 shrink-0 shadow-[0_-10px_40px_rgba(0,0,0,0.05)] z-20">
+          <div className="p-4 bg-white border-t border-slate-100 space-y-3 shrink-0 shadow-lg z-20">
              <div className="grid grid-cols-2 gap-3">
-                <button 
-                  onClick={() => setPaymentMethod('efectivo')} 
-                  className={`py-3 rounded-xl font-black text-[10px] uppercase border-2 transition-all flex flex-col items-center justify-center gap-1 ${
-                    paymentMethod === 'efectivo' 
-                    ? 'bg-emerald-50 border-emerald-500 text-emerald-700' 
-                    : 'bg-white border-slate-100 text-slate-400 hover:bg-slate-50'
-                  }`}
-                >
-                  <span className="text-lg">💵</span>
-                  Efectivo
-                </button>
-                <button 
-                  onClick={() => setPaymentMethod('transferencia')} 
-                  className={`py-3 rounded-xl font-black text-[10px] uppercase border-2 transition-all flex flex-col items-center justify-center gap-1 ${
-                    paymentMethod === 'transferencia' 
-                    ? 'bg-indigo-50 border-indigo-500 text-indigo-700' 
-                    : 'bg-white border-slate-100 text-slate-400 hover:bg-slate-50'
-                  }`}
-                >
-                  <span className="text-lg">📱</span>
-                  Transferencia
-                </button>
+                <button onClick={() => setPaymentMethod('efectivo')} className={`py-3 rounded-xl font-black text-[10px] uppercase border-2 transition-all flex flex-col items-center justify-center gap-1 ${paymentMethod === 'efectivo' ? 'bg-emerald-50 border-emerald-500 text-emerald-700' : 'bg-white border-slate-100 text-slate-400'}`}>💵 Efectivo</button>
+                <button onClick={() => setPaymentMethod('transferencia')} className={`py-3 rounded-xl font-black text-[10px] uppercase border-2 transition-all flex flex-col items-center justify-center gap-1 ${paymentMethod === 'transferencia' ? 'bg-indigo-50 border-indigo-500 text-indigo-700' : 'bg-white border-slate-100 text-slate-400'}`}>📱 Transf.</button>
              </div>
-
              {paymentMethod === 'efectivo' && (
                <div className="animate-in slide-in-from-bottom-2 fade-in">
                   <div className="relative mb-2">
                     <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-black text-sm">$</span>
-                    <input 
-                      type="number" 
-                      className="w-full pl-8 pr-4 py-3 rounded-xl border-2 border-slate-100 font-black text-xl outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all bg-slate-50 text-slate-900 placeholder:text-slate-300" 
-                      placeholder="RECIBIDO" 
-                      value={cashReceived} 
-                      onChange={e => setCashReceived(e.target.value)} 
-                    />
+                    <input type="number" className="w-full pl-8 pr-4 py-3 rounded-xl border-2 border-slate-100 font-black text-xl outline-none focus:border-emerald-500 bg-slate-50" placeholder="RECIBIDO" value={cashReceived} onChange={e => setCashReceived(e.target.value)} />
                   </div>
-                  
-                  {Number(cashReceived) >= totalAmount && Number(cashReceived) > 0 && (
-                    <div className="flex justify-between items-center px-3 py-2 bg-emerald-50/50 rounded-lg border border-emerald-100/50">
-                      <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Cambio:</span>
-                      <span className="text-xl font-black text-emerald-600 tracking-tighter">${changeDue.toLocaleString()}</span>
-                    </div>
+                  {Number(cashReceived) >= totalAmount && (
+                    <div className="flex justify-between items-center px-3 py-2 bg-emerald-50 rounded-lg border border-emerald-100"><span className="text-[10px] font-black text-emerald-600 uppercase">Cambio:</span><span className="text-xl font-black text-emerald-600">${changeDue.toLocaleString()}</span></div>
                   )}
                </div>
              )}
-
-             <button 
-                disabled={cart.length === 0 || processing || (paymentMethod === 'efectivo' && (Number(cashReceived) < totalAmount || cashReceived === ''))} 
-                onClick={handleCheckout} 
-                className={`w-full py-4 rounded-xl font-black text-xs uppercase tracking-[0.2em] shadow-xl transition-all active:scale-95 disabled:opacity-50 disabled:shadow-none ${
-                  paymentMethod === 'efectivo' ? 'bg-slate-900 text-white hover:bg-emerald-600' : 'bg-indigo-600 text-white hover:bg-indigo-700'
-                }`}
-              >
-                {processing ? '...' : 'COBRAR'}
-              </button>
+             <button disabled={cart.length === 0 || processing || (paymentMethod === 'efectivo' && (Number(cashReceived) < totalAmount || cashReceived === ''))} onClick={handleCheckout} className="w-full py-4 rounded-xl font-black text-xs uppercase tracking-widest bg-slate-900 text-white hover:bg-emerald-600 shadow-xl disabled:opacity-50">{processing ? 'Procesando...' : 'COBRAR'}</button>
           </div>
         </div>
       </div>
 
-      {/* MODAL SCANNER */}
       {isScanning && (
         <div className="fixed inset-0 z-[200] bg-black/95 flex flex-col items-center justify-center p-6 animate-in fade-in">
           <div className="w-full max-w-lg aspect-square relative rounded-[4rem] overflow-hidden border-4 border-emerald-500/30">
              <video ref={videoRef} className="w-full h-full object-cover" />
-             <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-64 h-64 border-2 border-emerald-500 rounded-[3rem] relative shadow-[0_0_0_1000px_rgba(0,0,0,0.6)]">
-                   <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-1 bg-emerald-500 animate-scan shadow-[0_0_15px_#10b981]"></div>
-                </div>
-             </div>
+             <div className="absolute inset-0 flex items-center justify-center"><div className="w-64 h-64 border-2 border-emerald-500 rounded-[3rem] relative shadow-[0_0_0_1000px_rgba(0,0,0,0.6)]"><div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-1 bg-emerald-500 animate-scan"></div></div></div>
           </div>
-          <button onClick={stopScanner} className="mt-10 bg-white text-slate-900 px-12 py-5 rounded-full font-black text-xs uppercase tracking-widest shadow-2xl hover:bg-rose-500 hover:text-white transition-all">Cancelar Escaneo</button>
+          <button onClick={stopScanner} className="mt-10 bg-white text-slate-900 px-12 py-5 rounded-full font-black text-xs uppercase shadow-2xl">Cancelar Escaneo</button>
           <style>{`@keyframes scan { 0% { top: 0; } 100% { top: 100%; } } .animate-scan { position: absolute; animation: scan 2s infinite ease-in-out; }`}</style>
         </div>
       )}
 
-      {/* RESUMEN DE ÉXITO */}
       {showOrderSummary && (
         <div className="fixed inset-0 z-[200] bg-slate-950/98 backdrop-blur-2xl flex items-center justify-center p-4 animate-in fade-in">
           <div className="bg-white w-full max-w-2xl rounded-[3rem] overflow-hidden shadow-2xl animate-in zoom-in-95 flex flex-col p-8 lg:p-12 max-h-[90vh]">
             <div className="text-center mb-8 shrink-0">
-              <div className="w-16 h-16 bg-emerald-500 rounded-2xl flex items-center justify-center text-white text-3xl mb-4 mx-auto shadow-xl shadow-emerald-200">✓</div>
-              <h2 className="text-3xl font-black uppercase tracking-tight text-slate-900 leading-none">Venta Exitosa</h2>
+              <div className="w-16 h-16 bg-emerald-500 rounded-2xl flex items-center justify-center text-white text-3xl mb-4 mx-auto shadow-xl">✓</div>
+              <h2 className="text-3xl font-black uppercase text-slate-900">Venta Exitosa</h2>
               <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.4em] mt-2">#{showOrderSummary.transactionId}</p>
             </div>
-            
             <div className="flex-1 overflow-y-auto space-y-3 mb-8 pr-2 custom-scrollbar bg-slate-50 p-4 rounded-2xl border border-slate-100">
               {showOrderSummary.items.map((item: any, i: number) => (
                 <div key={i} className="flex justify-between items-center py-2 border-b border-slate-200/50 last:border-0">
-                   <div>
-                      <p className="font-black text-slate-900 text-[11px] uppercase">{item.product.nombre}</p>
-                      <div className="flex items-center gap-2">
-                        <p className="text-[9px] text-slate-500 font-bold uppercase">{item.cantidad} {item.saleMode}(s)</p>
-                        {item.discountApplied > 0 && (
-                          <span className="text-[9px] text-slate-400 font-bold uppercase line-through decoration-rose-400">
-                            ${(item.originalPrice * item.cantidad).toLocaleString()}
-                          </span>
-                        )}
-                      </div>
-                   </div>
+                   <div><p className="font-black text-slate-900 text-[11px] uppercase">{item.product.nombre}</p><p className="text-[9px] text-slate-500 font-bold uppercase">{item.cantidad} {item.saleMode}(s)</p></div>
                    <p className="font-black text-slate-900 text-base tracking-tighter">${(item.cantidad * item.finalPrice).toLocaleString()}</p>
                 </div>
               ))}
             </div>
-
             <div className="shrink-0 space-y-6">
-              <div className="flex justify-between items-end px-2">
-                <div className="text-left">
-                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Total Cobrado</span>
-                   <p className="text-5xl font-black text-slate-900 tracking-tighter leading-none">${showOrderSummary.total.toLocaleString()}</p>
-                </div>
-                {showOrderSummary.paymentMethod === 'efectivo' && (
-                  <div className="text-right">
-                    <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest block mb-1">Cambio</span>
-                    <p className="text-3xl font-black text-emerald-600 tracking-tighter">${showOrderSummary.change.toLocaleString()}</p>
-                  </div>
-                )}
-              </div>
-              <button onClick={() => setShowOrderSummary(null)} className="w-full py-5 bg-slate-950 text-white rounded-[2rem] font-black text-[10px] uppercase tracking-[0.4em] shadow-2xl hover:bg-emerald-600 transition-all active:scale-95">Nueva Venta</button>
+              <div className="flex justify-between items-end px-2"><div><span className="text-[10px] font-black text-slate-400 uppercase">Total Cobrado</span><p className="text-5xl font-black text-slate-900 tracking-tighter leading-none mt-1">${showOrderSummary.total.toLocaleString()}</p></div>{showOrderSummary.paymentMethod === 'efectivo' && (<div><span className="text-[10px] font-black text-emerald-600 uppercase">Cambio</span><p className="text-3xl font-black text-emerald-600 tracking-tighter">${showOrderSummary.change.toLocaleString()}</p></div>)}</div>
+              <button onClick={() => setShowOrderSummary(null)} className="w-full py-5 bg-slate-950 text-white rounded-[2rem] font-black text-[10px] uppercase shadow-2xl hover:bg-emerald-600 transition-all active:scale-95">Nueva Venta</button>
             </div>
           </div>
         </div>
