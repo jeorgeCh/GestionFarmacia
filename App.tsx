@@ -30,7 +30,6 @@ const App: React.FC = () => {
       if (savedUser) {
         const parsed = JSON.parse(savedUser);
         if (parsed && parsed.id) {
-          // VALIDACIÓN CRÍTICA: Verificar que el usuario aún exista en la DB
           const { data, error } = await supabase
             .from('usuarios')
             .select('id, activo')
@@ -38,7 +37,6 @@ const App: React.FC = () => {
             .maybeSingle();
 
           if (error || !data || !data.activo) {
-            console.warn("Sesión inválida o usuario eliminado.");
             handleLogout();
           } else {
             setUser(parsed);
@@ -46,7 +44,6 @@ const App: React.FC = () => {
         }
       }
     } catch (err) {
-      console.error("Error cargando sesión:", err);
       handleLogout();
     } finally {
       setLoading(false);
@@ -69,17 +66,16 @@ const App: React.FC = () => {
     <div className="min-h-screen flex items-center justify-center bg-slate-50">
       <div className="flex flex-col items-center gap-4">
         <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
-        <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Verificando Credenciales...</p>
+        <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Sincronizando...</p>
       </div>
     </div>
   );
 
   if (!user) return <Login onLogin={handleLogin} />;
 
+  const isAdmin = user.role_id === 1;
+
   const renderView = () => {
-    if (!user) return null;
-    const isAdmin = user.role_id === 1;
-    
     switch (view) {
       case 'dashboard': return <Dashboard user={user} />;
       case 'inventory': return <Inventory user={user} />;
@@ -93,8 +89,6 @@ const App: React.FC = () => {
     }
   };
 
-  const isAdmin = user.role_id === 1;
-
   return (
     <div className="flex min-h-screen bg-[#F8FAFC]">
       <Sidebar user={user} currentView={view} setView={setView} onLogout={handleLogout} />
@@ -103,7 +97,7 @@ const App: React.FC = () => {
         <header className="mb-6 flex justify-between items-center bg-white p-5 lg:p-6 rounded-[2rem] shadow-sm border border-slate-100">
           <div>
             <h1 className="text-xl lg:text-2xl font-black text-slate-900 tracking-tight uppercase">
-              {view === 'pos' ? 'Ventas' : view === 'income' ? 'Ingresos' : view === 'inventory' ? 'Inventario' : view === 'discounts' ? 'Descuentos' : view === 'providers' ? 'Proveedores' : view === 'analytics' ? 'Rentabilidad' : view === 'timeline' ? 'Historial de Ventas' : 'Panel'}
+              {view === 'pos' ? 'Ventas' : view === 'income' ? 'Ingresos' : view === 'inventory' ? 'Inventario' : view === 'discounts' ? 'Descuentos' : view === 'providers' ? 'Proveedores' : view === 'analytics' ? 'Rentabilidad' : view === 'timeline' ? 'Historial' : 'Panel'}
             </h1>
             <p className="text-[10px] lg:text-xs text-slate-400 font-bold uppercase tracking-widest">Hola, {user.username || 'Usuario'} 👋</p>
           </div>
@@ -124,6 +118,7 @@ const App: React.FC = () => {
         </div>
       </main>
 
+      {/* Navegación Móvil Mejorada con Historial */}
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 py-3 flex items-center z-40 shadow-[0_-10px_30px_rgba(0,0,0,0.05)] backdrop-blur-md overflow-x-auto custom-scrollbar px-4 gap-6 no-scrollbar">
         <button onClick={() => setView('dashboard')} className={`flex flex-col items-center gap-1 min-w-[50px] transition-all ${view === 'dashboard' ? 'text-slate-900 font-black' : 'text-slate-300'}`}>
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
@@ -131,7 +126,7 @@ const App: React.FC = () => {
         </button>
         <button onClick={() => setView('pos')} className={`flex flex-col items-center gap-1 min-w-[50px] transition-all ${view === 'pos' ? 'text-emerald-600 font-black' : 'text-slate-300'}`}>
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
-          <span className="text-[7px] uppercase tracking-tighter">POS</span>
+          <span className="text-[7px] uppercase tracking-tighter">Venta</span>
         </button>
         <button onClick={() => setView('inventory')} className={`flex flex-col items-center gap-1 min-w-[50px] transition-all ${view === 'inventory' ? 'text-indigo-600 font-black' : 'text-slate-300'}`}>
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
@@ -143,13 +138,17 @@ const App: React.FC = () => {
         </button>
         {isAdmin && (
            <>
+            <button onClick={() => setView('timeline')} className={`flex flex-col items-center gap-1 min-w-[50px] transition-all ${view === 'timeline' ? 'text-rose-600 font-black' : 'text-slate-300'}`}>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              <span className="text-[7px] uppercase tracking-tighter">Histo</span>
+            </button>
             <button onClick={() => setView('providers')} className={`flex flex-col items-center gap-1 min-w-[50px] transition-all ${view === 'providers' ? 'text-indigo-600 font-black' : 'text-slate-300'}`}>
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
               <span className="text-[7px] uppercase tracking-tighter">Prov</span>
             </button>
             <button onClick={() => setView('analytics')} className={`flex flex-col items-center gap-1 min-w-[50px] transition-all ${view === 'analytics' ? 'text-indigo-600 font-black' : 'text-slate-300'}`}>
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
-              <span className="text-[7px] uppercase tracking-tighter">Balance</span>
+              <span className="text-[7px] uppercase tracking-tighter">Analit</span>
             </button>
           </>
         )}
