@@ -8,17 +8,35 @@ const SalesTimeline: React.FC = () => {
   const [loadingMore, setLoadingMore] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState<any | null>(null);
   const [visibleCount, setVisibleCount] = useState(15);
+  const [dayTotal, setDayTotal] = useState(0);
+  const [currentDateStr, setCurrentDateStr] = useState(new Date().toDateString());
 
   useEffect(() => {
     fetchTimeline();
-  }, []);
+
+    // Verificador de cambio de día para auto-reinicio
+    const timer = setInterval(() => {
+      const nowStr = new Date().toDateString();
+      if (nowStr !== currentDateStr) {
+        setCurrentDateStr(nowStr);
+        fetchTimeline();
+      }
+    }, 60000); // Revisar cada minuto
+
+    return () => clearInterval(timer);
+  }, [currentDateStr]);
 
   const fetchTimeline = async () => {
     setLoading(true);
     try {
+      // Cálculo del inicio del día actual (00:00:00 local)
+      const now = new Date();
+      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).toISOString();
+      
       const { data, error } = await supabase
         .from('ventas')
         .select('*, productos(nombre, laboratorio, tipo, precio, precio_unidad, codigo_barras), usuarios(username)')
+        .gte('fecha', startOfDay) // FILTRO DE REINICIO DIARIO: Solo ventas de hoy
         .order('fecha', { ascending: false });
       
       if (error) throw error;
@@ -46,6 +64,10 @@ const SalesTimeline: React.FC = () => {
       }, []);
 
       setTransactions(grouped);
+      
+      const total = grouped.reduce((sum, t) => sum + t.total_venta, 0);
+      setDayTotal(total);
+
     } catch (err) {
       console.error("Error cargando línea de tiempo:", err);
     } finally {
@@ -64,29 +86,42 @@ const SalesTimeline: React.FC = () => {
   if (loading) return (
     <div className="flex flex-col items-center justify-center py-24 gap-4">
       <div className="w-12 h-12 border-4 border-slate-200 border-t-indigo-600 rounded-full animate-spin"></div>
-      <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Sincronizando bitácora financiera...</p>
+      <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Sincronizando bitácora de hoy...</p>
     </div>
   );
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-24 animate-slide-up px-2 sm:px-0">
-      <div className="bg-white p-6 sm:p-10 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col sm:flex-row justify-between items-center gap-4">
-        <div>
-          <h3 className="text-xl sm:text-2xl font-black text-slate-900 uppercase tracking-tight leading-none mb-1">Historial de Operaciones</h3>
-          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Registro detallado de transacciones</p>
+      
+      {/* CABECERA CON TOTAL DEL DÍA */}
+      <div className="bg-white p-6 sm:p-10 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col sm:flex-row justify-between items-center gap-6">
+        <div className="flex flex-col sm:flex-row items-center gap-6 text-center sm:text-left">
+          <div className="w-16 h-16 bg-slate-900 text-white rounded-2xl flex items-center justify-center shadow-xl">
+            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          </div>
+          <div>
+            <div className="flex items-center gap-2 justify-center sm:justify-start">
+               <h3 className="text-xl sm:text-2xl font-black text-slate-900 uppercase tracking-tight leading-none">Ventas de Hoy</h3>
+               <span className="px-2 py-1 bg-emerald-500 text-white text-[8px] font-black uppercase rounded-lg tracking-widest animate-pulse">En Vivo</span>
+            </div>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">El historial se reinicia automáticamente a las 12:00 AM</p>
+          </div>
         </div>
-        <button 
-          onClick={fetchTimeline}
-          className="w-full sm:w-auto px-6 py-4 bg-slate-900 text-white rounded-2xl flex items-center justify-center gap-3 hover:bg-slate-800 transition-all shadow-xl active:scale-95"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-          <span className="text-[10px] font-black uppercase tracking-widest">Actualizar</span>
-        </button>
+        
+        <div className="flex flex-col items-center sm:items-end">
+           <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Recaudado Hoy</span>
+           <p className="text-3xl font-black text-emerald-600 tracking-tighter leading-none">${dayTotal.toLocaleString()}</p>
+        </div>
       </div>
 
       <div className="relative ml-4 sm:ml-8 border-l-2 border-slate-100 space-y-4 pl-8 sm:pl-12 py-4">
         {transactions.length === 0 ? (
-          <div className="text-center py-20 bg-white rounded-[2.5rem] border border-slate-50 opacity-40 font-black uppercase text-xs tracking-[0.4em]">Sin registros hoy</div>
+          <div className="text-center py-20 bg-white rounded-[2.5rem] border border-dashed border-slate-200 opacity-60 flex flex-col items-center justify-center">
+             <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center text-slate-200 mb-4">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+             </div>
+             <p className="font-black uppercase text-[10px] tracking-[0.3em] text-slate-400">No hay ventas registradas hoy</p>
+          </div>
         ) : transactions.slice(0, visibleCount).map((t, index) => (
           <div 
             key={t.transaccion_id} 
@@ -94,31 +129,32 @@ const SalesTimeline: React.FC = () => {
             className="relative group cursor-pointer animate-in slide-in-from-left-4" 
             style={{ animationDelay: `${index * 30}ms` }}
           >
-            <div className={`absolute -left-[45px] sm:-left-[61px] top-1/2 -translate-y-1/2 w-8 h-8 rounded-2xl border-4 border-white shadow-md z-10 flex items-center justify-center transition-transform group-hover:scale-110 ${t.metodo_pago === 'efectivo' ? 'bg-emerald-500 text-white' : 'bg-indigo-600 text-white'}`}>
-               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d={t.metodo_pago === 'efectivo' ? "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1" : "M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"} />
-               </svg>
+            {/* Punto en la línea de tiempo */}
+            <div className={`absolute -left-[45px] sm:-left-[61px] top-1/2 -translate-y-1/2 w-8 h-8 rounded-2xl border-4 border-white shadow-md z-10 flex items-center justify-center transition-transform group-hover:scale-110 ${t.metodo_pago === 'efectivo' ? 'bg-emerald-500 text-white' : 'bg-indigo-500 text-white'}`}>
+                <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
             </div>
 
-            <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm group-hover:shadow-xl group-hover:border-indigo-100 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                    {new Date(t.fecha).toLocaleDateString()} • {new Date(t.fecha).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                  </span>
-                  <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-lg border ${t.metodo_pago === 'efectivo' ? 'text-emerald-600 bg-emerald-50 border-emerald-100' : 'text-indigo-600 bg-indigo-50 border-indigo-100'}`}>
-                    {t.metodo_pago}
-                  </span>
+            <div className="bg-white p-5 sm:p-6 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-xl hover:border-indigo-100 transition-all flex flex-col sm:flex-row justify-between items-center gap-4">
+              <div className="flex items-center gap-4 w-full sm:w-auto">
+                <div className="text-left">
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">
+                    {new Date(t.fecha).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: true })}
+                  </p>
+                  <p className="font-black text-slate-900 text-xs uppercase truncate max-w-[200px]">
+                    {t.items[0]?.productos?.nombre} {t.items.length > 1 ? `y ${t.items.length - 1} más...` : ''}
+                  </p>
+                  <p className="text-[9px] text-indigo-600 font-black uppercase tracking-widest mt-0.5">Vendido por: {t.usuario || '---'}</p>
                 </div>
-                <h4 className="font-black text-slate-900 uppercase text-xs sm:text-sm truncate">
-                  {t.items[0]?.productos?.nombre} 
-                  {t.items.length > 1 && <span className="text-indigo-600 ml-2 text-[10px] font-bold">+ {t.items.length - 1} productos adicionales</span>}
-                </h4>
-                <p className="text-[9px] font-black text-slate-400 uppercase mt-1 tracking-tight">Cajero: <span className="text-slate-600">{t.usuario || 'Sistema'}</span></p>
               </div>
-              <div className="text-left sm:text-right border-t sm:border-t-0 pt-4 sm:pt-0 border-slate-50 shrink-0">
-                <p className="text-2xl font-black text-slate-900 tracking-tighter">${t.total_venta.toLocaleString()}</p>
-                <p className="text-[8px] font-black text-slate-300 uppercase mt-0.5">ID: {t.transaccion_id.slice(0, 8)}</p>
+
+              <div className="flex items-center justify-between sm:justify-end gap-6 w-full sm:w-auto border-t sm:border-t-0 pt-4 sm:pt-0 mt-2 sm:mt-0">
+                <div className="text-right">
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Total Ticket</p>
+                  <p className="text-xl font-black text-slate-900 tracking-tighter">${t.total_venta.toLocaleString()}</p>
+                </div>
+                <div className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest ${t.metodo_pago === 'efectivo' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-indigo-50 text-indigo-600 border border-indigo-100'}`}>
+                  {t.metodo_pago}
+                </div>
               </div>
             </div>
           </div>
@@ -126,108 +162,80 @@ const SalesTimeline: React.FC = () => {
       </div>
 
       {transactions.length > visibleCount && (
-        <div className="flex justify-center pt-6">
-          <button 
-            onClick={loadMore} 
-            disabled={loadingMore}
-            className="px-12 py-5 bg-white border-2 border-slate-100 rounded-3xl font-black text-[10px] uppercase tracking-[0.3em] text-slate-400 hover:text-slate-900 hover:border-slate-900 transition-all active:scale-95 disabled:opacity-50"
-          >
-            {loadingMore ? 'Sincronizando...' : 'Cargar más registros'}
-          </button>
+        <div className="flex justify-center pt-8">
+           <button 
+             onClick={loadMore} 
+             disabled={loadingMore}
+             className="px-10 py-4 bg-white border border-slate-200 text-slate-900 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm flex items-center gap-2"
+           >
+             {loadingMore ? (
+               <div className="w-3 h-3 border-2 border-slate-300 border-t-slate-900 rounded-full animate-spin"></div>
+             ) : 'Cargar más registros'}
+           </button>
         </div>
       )}
 
-      {/* MODAL DE RECIBO REDISEÑADO - ALINEADO ARRIBA */}
+      {/* MODAL DETALLE DE TICKET */}
       {selectedTransaction && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center pt-12 sm:pt-20 bg-slate-950/90 backdrop-blur-xl p-4 animate-in fade-in overflow-y-auto">
-          <div className="bg-white w-full max-w-[400px] rounded-[1.5rem] overflow-hidden shadow-2xl animate-in zoom-in-95 flex flex-col max-h-[85vh] relative mb-10">
-            
-            {/* Cabecera del Ticket */}
-            <div className="bg-slate-50 p-8 text-center border-b-2 border-dashed border-slate-200 shrink-0 relative">
-               <button onClick={() => setSelectedTransaction(null)} className="absolute top-4 right-4 w-8 h-8 bg-white border border-slate-100 rounded-full flex items-center justify-center text-slate-300 hover:text-rose-500 transition-all shadow-sm">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6"/></svg>
-               </button>
-               
-               <div className="mb-4">
-                  <span className="block font-black text-xl tracking-tighter text-slate-900 uppercase">Droguería Pro</span>
-                  <span className="text-[8px] font-black uppercase text-indigo-600 tracking-[0.3em]">Copia de Cliente</span>
-               </div>
-               
-               <div className="space-y-1">
-                 <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{new Date(selectedTransaction.fecha).toLocaleDateString()} — {new Date(selectedTransaction.fecha).toLocaleTimeString()}</p>
-                 <p className="text-[9px] text-slate-900 font-black uppercase">Ref: #{selectedTransaction.transaccion_id.slice(0, 12).toUpperCase()}</p>
-               </div>
-            </div>
-
-            {/* Cuerpo del Ticket */}
-            <div className="p-8 overflow-y-auto custom-scrollbar flex-1 bg-white">
-              <div className="space-y-4">
-                <div className="flex justify-between items-center text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2">
-                  <span>Detalle de Ítem</span>
-                  <span>Total</span>
-                </div>
-                
-                {selectedTransaction.items.map((item: any, idx: number) => (
-                  <div key={idx} className="space-y-1 py-2 border-b border-slate-50 last:border-0">
-                    <p className="font-black text-slate-900 text-[11px] uppercase leading-tight">{item.productos?.nombre}</p>
-                    <div className="flex justify-between items-end">
-                       <p className="text-[10px] text-slate-400 font-bold uppercase">
-                         {item.cantidad} {item.es_unidad ? 'UNIDAD(ES)' : 'CAJA(S)'} x ${Number(item.total / item.cantidad).toLocaleString()}
-                       </p>
-                       <p className="font-black text-slate-900 text-[12px] font-mono tracking-tighter">${Number(item.total).toLocaleString()}</p>
-                    </div>
-                  </div>
-                ))}
+        <div className="fixed inset-0 z-[200] bg-slate-950/95 backdrop-blur-xl flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white w-full max-w-lg rounded-[3.5rem] overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+            <div className="p-10 bg-slate-900 text-white flex justify-between items-center shrink-0">
+              <div>
+                <h3 className="text-xl font-black uppercase tracking-tight leading-none mb-1">Detalle de Ticket</h3>
+                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-[0.3em]">ID: {selectedTransaction.transaccion_id.split('-')[0]}</p>
               </div>
-
-              {/* Totales y Pago */}
-              <div className="mt-8 pt-6 border-t-2 border-dashed border-slate-100 space-y-6">
-                 <div className="flex justify-between items-center px-1">
-                   <span className="text-[11px] font-black text-slate-900 uppercase tracking-widest">Total a Pagar</span>
-                   <span className="text-4xl font-black text-slate-900 tracking-tighter">${selectedTransaction.total_venta.toLocaleString()}</span>
-                 </div>
-
-                 <div className="space-y-3">
-                   {selectedTransaction.metodo_pago === 'efectivo' ? (
-                     <div className="grid grid-cols-2 gap-3">
-                        <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                          <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Recibido</p>
-                          <p className="font-black text-slate-900 text-sm font-mono">${Number(selectedTransaction.dinero_recibido).toLocaleString()}</p>
-                        </div>
-                        <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100">
-                          <p className="text-[8px] font-black text-emerald-600 uppercase mb-1">Vueltas</p>
-                          <p className="font-black text-emerald-700 text-sm font-mono">${Number(selectedTransaction.cambio).toLocaleString()}</p>
-                        </div>
-                     </div>
-                   ) : (
-                     <div className="p-4 rounded-2xl bg-indigo-600 text-white text-center shadow-lg shadow-indigo-200">
-                        <p className="text-[9px] font-black uppercase tracking-widest">Pago con Transferencia</p>
-                        <p className="text-[8px] font-bold uppercase opacity-60 mt-0.5">Operación Aprobada</p>
-                     </div>
-                   )}
-                 </div>
-              </div>
-
-              {/* Pie de Recibo */}
-              <div className="mt-10 text-center space-y-4">
-                <div className="inline-block p-4 border-2 border-slate-100 rounded-3xl">
-                   <p className="text-[9px] font-black text-slate-900 uppercase mb-1">Atendido por: {selectedTransaction.usuario || 'Sistema'}</p>
-                   <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest">Gracias por su compra</p>
-                </div>
-              </div>
-            </div>
-            
-            {/* Botón de Cierre con efecto de corte */}
-            <div className="p-8 pt-4 bg-white relative">
-               <div className="absolute -top-3 left-0 right-0 flex justify-around opacity-10">
-                  {[...Array(20)].map((_,i) => <div key={i} className="w-2 h-2 bg-slate-900 rotate-45"></div>)}
-               </div>
-               <button 
-                onClick={() => setSelectedTransaction(null)}
-                className="w-full py-5 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-[0.4em] hover:bg-emerald-600 transition-all active:scale-95 shadow-xl"
-              >
-                Cerrar Ticket
+              <button onClick={() => setSelectedTransaction(null)} className="w-10 h-10 flex items-center justify-center text-slate-400 hover:text-white transition-colors">
+                 <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6"/></svg>
               </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-8 sm:p-10 space-y-6 custom-scrollbar bg-slate-50/50">
+              <div className="grid grid-cols-2 gap-4">
+                 <div className="p-5 bg-white rounded-2xl border border-slate-100 shadow-sm">
+                   <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Hora Venta</span>
+                   <span className="text-sm font-black text-slate-900 uppercase">{new Date(selectedTransaction.fecha).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: true })}</span>
+                 </div>
+                 <div className="p-5 bg-white rounded-2xl border border-slate-100 shadow-sm">
+                   <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Pago</span>
+                   <span className="text-sm font-black text-slate-900 uppercase">{selectedTransaction.metodo_pago}</span>
+                 </div>
+              </div>
+
+              <div className="space-y-3">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Productos Vendidos</span>
+                <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+                   {selectedTransaction.items.map((item: any, i: number) => (
+                     <div key={i} className="p-5 flex justify-between items-center border-b border-slate-50 last:border-0 hover:bg-slate-50 transition-colors">
+                        <div className="flex-1 pr-4">
+                          <p className="font-black text-slate-900 text-xs uppercase leading-tight mb-0.5">{item.productos?.nombre}</p>
+                          <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">
+                            {item.cantidad} {item.es_unidad ? 'unid' : 'caja'}(s) • ${item.total / item.cantidad} c/u
+                          </p>
+                        </div>
+                        <p className="font-black text-slate-900 text-sm tracking-tighter">${item.total.toLocaleString()}</p>
+                     </div>
+                   ))}
+                </div>
+              </div>
+
+              <div className="p-8 bg-slate-900 rounded-[2.5rem] text-white space-y-4 shadow-xl">
+                 <div className="flex justify-between items-center">
+                   <span className="text-[10px] font-black text-slate-400 uppercase">Recibido</span>
+                   <span className="font-bold">${selectedTransaction.dinero_recibido.toLocaleString()}</span>
+                 </div>
+                 <div className="flex justify-between items-center">
+                   <span className="text-[10px] font-black text-slate-400 uppercase">Cambio</span>
+                   <span className="font-bold text-emerald-400">${selectedTransaction.cambio.toLocaleString()}</span>
+                 </div>
+                 <div className="pt-4 border-t border-slate-800 flex justify-between items-end">
+                    <span className="text-[11px] font-black text-indigo-400 uppercase tracking-widest mb-1">Total Cobrado</span>
+                    <span className="text-4xl font-black tracking-tighter leading-none">${selectedTransaction.total_venta.toLocaleString()}</span>
+                 </div>
+              </div>
+            </div>
+            
+            <div className="p-8 shrink-0 bg-white border-t border-slate-100">
+               <button onClick={() => setSelectedTransaction(null)} className="w-full py-5 bg-slate-950 text-white rounded-[2rem] font-black text-[11px] uppercase tracking-widest shadow-xl hover:bg-indigo-600 transition-all">Cerrar Detalle</button>
             </div>
           </div>
         </div>
