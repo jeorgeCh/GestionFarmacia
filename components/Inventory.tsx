@@ -217,27 +217,30 @@ const Inventory: React.FC<InventoryProps> = ({ user }) => {
           <table className="w-full text-left">
             <thead>
               <tr className="bg-slate-950 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                <th className="px-10 py-6">Medicamento y Detalle</th>
+                <th className="px-6 py-6 pl-10">Medicamento</th>
+                <th className="px-6 py-6">Descripción</th>
                 <th className="px-6 py-6 text-center">Ubicación</th>
                 <th className="px-6 py-6 text-center">Stock</th>
                 <th className="px-6 py-6 text-right">Precio</th>
-                <th className="px-10 py-6">Acción</th>
+                <th className="px-10 py-6 text-center">Acción</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {loading ? (
-                <tr><td colSpan={5} className="py-20 text-center font-black uppercase text-slate-300">Cargando datos...</td></tr>
+                <tr><td colSpan={6} className="py-20 text-center font-black uppercase text-slate-300">Cargando datos...</td></tr>
               ) : filteredProducts.map(p => (
                 <tr key={p.id} className="hover:bg-slate-50/50 transition-all group">
-                  <td className="px-10 py-6">
+                  <td className="px-6 py-6 pl-10">
                     <div className="font-black text-slate-900 uppercase text-xs mb-0.5">{p.nombre}</div>
-                    <div className="text-[9px] text-slate-400 font-bold uppercase mb-2">Lab: {p.laboratorio}</div>
-                    <div className="text-[9px] text-slate-500 bg-slate-100 px-3 py-1.5 rounded-xl inline-block max-w-[250px] truncate italic">
+                    <div className="text-[9px] text-slate-400 font-bold uppercase">Lab: {p.laboratorio}</div>
+                  </td>
+                  <td className="px-6 py-6">
+                    <div className="text-[9px] text-slate-500 bg-slate-100 px-3 py-1.5 rounded-xl inline-block max-w-[200px] lg:max-w-[300px] truncate italic border border-slate-200">
                       {p.descripcion || 'Sin descripción'}
                     </div>
                   </td>
                   <td className="px-6 py-6 text-center">
-                    <span className="px-3 py-1 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-lg text-[9px] font-black uppercase">
+                    <span className="px-3 py-1 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-lg text-[9px] font-black uppercase whitespace-nowrap">
                       📍 {p.ubicacion}
                     </span>
                   </td>
@@ -246,8 +249,8 @@ const Inventory: React.FC<InventoryProps> = ({ user }) => {
                       {p.stock}
                     </span>
                   </td>
-                  <td className="px-6 py-6 text-right font-black text-slate-900 text-sm">${p.precio.toLocaleString()}</td>
-                  <td className="px-10 py-6">
+                  <td className="px-6 py-6 text-right font-black text-slate-900 text-sm whitespace-nowrap">${p.precio.toLocaleString()}</td>
+                  <td className="px-10 py-6 text-center">
                     <button onClick={() => handleOpenModal(p)} className="p-3 bg-slate-100 text-slate-400 rounded-xl hover:bg-slate-950 hover:text-white transition-all">
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                     </button>
@@ -279,7 +282,7 @@ const Inventory: React.FC<InventoryProps> = ({ user }) => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="md:col-span-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">Nombre del Medicamento *</label>
-                  <input type="text" className="w-full px-6 py-4 bg-white border-2 border-slate-100 rounded-2xl font-black text-sm uppercase focus:border-indigo-600 outline-none" value={formData.nombre} onChange={e => setFormData({...formData, nombre: e.target.value})} placeholder="NOMBRE Y PRESENTACIÓN" />
+                  <input type="text" className="w-full px-6 py-4 bg-white border-2 border-slate-100 rounded-2xl font-black text-sm uppercase focus:border-indigo-600 outline-none" value={formData.nombre} onChange={e => setFormData({...formData,nombre: e.target.value})} placeholder="NOMBRE Y PRESENTACIÓN" />
                 </div>
 
                 <div>
@@ -305,7 +308,7 @@ const Inventory: React.FC<InventoryProps> = ({ user }) => {
                   
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Precio Venta (Caja) *</label>
+                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Precio al Público *</label>
                       <input type="number" className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-black text-lg focus:bg-white outline-none" value={formData.precio} onChange={e => setFormData({...formData, precio: e.target.value})} placeholder="0.00" />
                     </div>
                     {formData.tipo === 'pastillas' && (

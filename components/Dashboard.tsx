@@ -118,29 +118,34 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
     <div className="space-y-6 pb-12 animate-slide-up">
       <div className={`grid grid-cols-1 ${isAdmin ? 'md:grid-cols-2 lg:grid-cols-5' : 'md:grid-cols-2 lg:grid-cols-2'} gap-4`}>
         {isAdmin && (
+          <div className="bg-slate-900 p-6 rounded-[2rem] border border-slate-800 shadow-xl lg:col-span-1 flex flex-col justify-between">
+            <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest mb-2">Ventas Históricas</p>
+            <p className="text-2xl font-black text-white tracking-tight leading-none">${stats.totalRevenueAllTime.toLocaleString()}</p>
+          </div>
+        )}
+        
+        {/* Visible para todos */}
+        <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col justify-between">
+          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Ventas Hoy</p>
+          <p className="text-2xl font-black text-emerald-600 tracking-tighter leading-none">${stats.revenue.toLocaleString()}</p>
+        </div>
+
+        {isAdmin && (
           <>
-            <div className="bg-slate-900 p-6 rounded-[2rem] border border-slate-800 shadow-xl lg:col-span-1">
-              <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest mb-1">Ventas Históricas</p>
-              <p className="text-xl font-black text-white">${stats.totalRevenueAllTime.toLocaleString()}</p>
+            <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col justify-between">
+              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Inversión Hoy</p>
+              <p className="text-2xl font-black text-slate-900 tracking-tighter leading-none">${stats.dailyCosts.toLocaleString()}</p>
             </div>
-            <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
-              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Ventas Hoy</p>
-              <p className="text-xl font-black text-emerald-600">${stats.revenue.toLocaleString()}</p>
-            </div>
-            <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
-              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Inversión Hoy</p>
-              <p className="text-xl font-black text-slate-900">${stats.dailyCosts.toLocaleString()}</p>
-            </div>
-            <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
-              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Utilidad Bruta</p>
-              <p className="text-xl font-black text-indigo-600">${(stats.revenue - stats.dailyCosts).toLocaleString()}</p>
+            <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col justify-between">
+              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Utilidad Bruta</p>
+              <p className="text-2xl font-black text-indigo-600 tracking-tighter leading-none">${(stats.revenue - stats.dailyCosts).toLocaleString()}</p>
             </div>
           </>
         )}
         
-        <div className={`bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm`}>
-          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Stock Bajo</p>
-          <p className="text-xl font-black text-amber-600">{stats.stockLow} Refs</p>
+        <div className={`bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col justify-between`}>
+          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Stock Bajo</p>
+          <p className="text-2xl font-black text-amber-600 tracking-tighter leading-none">{stats.stockLow} Refs</p>
         </div>
       </div>
 
@@ -157,7 +162,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
               ) : recentTransactions.map((t, i) => (
                 <div key={i} className="flex items-center justify-between p-5 bg-slate-50 rounded-[2rem] hover:bg-white border border-transparent hover:border-slate-100 transition-all group">
                   <div className="flex items-center gap-4 overflow-hidden">
-                    <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-emerald-600 shadow-sm shrink-0 font-black text-sm group-hover:bg-emerald-600 group-hover:text-white transition-all">
+                    <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center text-emerald-600 shadow-sm shrink-0 font-black text-sm group-hover:bg-emerald-600 group-hover:text-white transition-all tracking-tighter border border-slate-100">
                        ${t.total.toLocaleString()}
                     </div>
                     <div className="truncate">

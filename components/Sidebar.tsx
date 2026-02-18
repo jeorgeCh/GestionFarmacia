@@ -85,7 +85,7 @@ const Sidebar: React.FC<SidebarProps> = ({ user, currentView, setView, onLogout 
             </div>
             <div className="overflow-hidden">
               <p className="text-white font-black truncate text-sm">{username}</p>
-              <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">{user?.role_id === 1 ? 'Admin' : 'Vendedor'}</p>
+              <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">{user?.role_id === 1 ? 'Admin' : 'Modo Caja'}</p>
             </div>
           </div>
         </div>
