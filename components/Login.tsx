@@ -19,23 +19,31 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     setError('');
 
     try {
+      // Usamos maybeSingle para evitar errores si no hay match, y atrapamos errores de red
       const { data, error: queryError } = await supabase
         .from('usuarios')
-        .select('*')
+        .select('*, roles(nombre)')
         .eq('email', email.trim())
         .eq('password_plano', password.trim())
         .eq('activo', true)
-        .single();
+        .maybeSingle();
 
       if (queryError) {
-        if (queryError.code === 'PGRST116') throw new Error('Credenciales incorrectas');
-        if (queryError.message.includes('permission denied')) throw new Error('Acceso denegado por políticas de seguridad');
-        throw new Error('Error al conectar con el servidor');
+        // Detectar si es un error de red (fetch failed)
+        if (queryError.message && (queryError.message.includes('fetch') || queryError.message.includes('network'))) {
+           throw new Error('Error de Conexión: No se pudo contactar con la base de datos. Verifica tu internet.');
+        }
+        throw queryError;
+      }
+
+      if (!data) {
+         throw new Error('Credenciales incorrectas o usuario inactivo.');
       }
 
       onLogin(data as Usuario);
     } catch (err: any) {
-      setError(err.message);
+      console.error("Login Error:", err);
+      setError(err.message || "Error desconocido al iniciar sesión");
     } finally {
       setLoading(false);
     }
@@ -43,7 +51,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col justify-center items-center p-4 md:p-6 font-sans">
-      <div className="w-full max-w-[400px] bg-white rounded-[2.5rem] shadow-[0_40px_80px_-20px_rgba(0,0,0,0.05)] border border-slate-100 p-8 md:p-12">
+      <div className="w-full max-w-[400px] bg-white rounded-[2.5rem] shadow-[0_40px_80px_-20px_rgba(0,0,0,0.05)] border border-slate-100 p-8 md:p-12 animate-in fade-in zoom-in-95">
         
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-slate-900 text-white mb-6 shadow-xl shadow-slate-200">
@@ -81,7 +89,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           </div>
 
           {error && (
-            <div className="bg-rose-50 text-rose-600 p-3.5 rounded-xl text-[11px] font-bold text-center border border-rose-100 animate-slide-up">
+            <div className="bg-rose-50 text-rose-600 p-4 rounded-xl text-[10px] font-black text-center border border-rose-100 animate-slide-up flex items-center justify-center gap-2">
+              <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
               {error}
             </div>
           )}
@@ -91,10 +100,14 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             disabled={loading}
             className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-4 rounded-xl transition-all shadow-lg active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2 mt-4 text-[10px] uppercase tracking-widest"
           >
-            {loading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : 'Ingresar'}
+            {loading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : 'Ingresar al Sistema'}
           </button>
         </form>
       </div>
+      
+      <p className="mt-8 text-[10px] text-slate-400 font-bold uppercase tracking-widest text-center">
+        ¿Problemas de conexión? <br/> Verifica tu internet o contacta soporte.
+      </p>
     </div>
   );
 };

@@ -14,6 +14,7 @@ interface CartItem {
   originalPrice: number;
   finalPrice: number;
   discountApplied: number;
+  unitsPerBox: number;
 }
 
 const POS: React.FC<POSProps> = ({ user }) => {
@@ -53,6 +54,8 @@ const POS: React.FC<POSProps> = ({ user }) => {
       if (productsData) {
         const mergedProducts = productsData.map(p => ({
           ...p,
+          // Aseguramos que unidades_por_caja tenga un valor mínimo de 1 para evitar divisiones por cero
+          unidades_por_caja: p.unidades_por_caja || 1, 
           descuentos: discountsData?.filter(d => d.producto_id === p.id) || []
         }));
 
@@ -61,6 +64,7 @@ const POS: React.FC<POSProps> = ({ user }) => {
         setSaleModes(prev => {
           const next = { ...prev };
           mergedProducts.forEach(p => {
+            // Por defecto caja si tiene, si no unidad
             if (!next[p.id]) next[p.id] = 'caja';
           });
           return next;
@@ -107,6 +111,13 @@ const POS: React.FC<POSProps> = ({ user }) => {
     setIsScanning(false);
   };
 
+  // Calcula cuántas unidades de este producto ya están "comprometidas" en el carrito
+  const getReservedUnits = (productId: number) => {
+    return cart
+      .filter(item => item.product.id === productId)
+      .reduce((acc, item) => acc + (item.cantidad * (item.saleMode === 'caja' ? item.unitsPerBox : 1)), 0);
+  };
+
   const getDiscountPercentage = (product: Producto): number => {
     if (product.descuentos && product.descuentos.length > 0) {
       const bestDiscount = product.descuentos.reduce((max, curr) => (curr.porcentaje > max.porcentaje ? curr : max));
@@ -117,6 +128,17 @@ const POS: React.FC<POSProps> = ({ user }) => {
 
   const addToCart = (product: Producto) => {
     const mode = product.tipo === 'pastillas' ? (saleModes[product.id] || 'caja') : 'caja';
+    const unitsPerBox = product.unidades_por_caja || 1;
+    
+    // Validar Stock Disponible
+    const currentReserved = getReservedUnits(product.id);
+    const quantityToDeduct = mode === 'caja' ? unitsPerBox : 1;
+    
+    if ((currentReserved + quantityToDeduct) > product.stock) {
+        alert(`Stock insuficiente. Disponibles: ${product.stock - currentReserved} unidades.`);
+        return;
+    }
+
     const basePrice = mode === 'unidad' 
       ? (Number(product.precio_unidad) || 0) 
       : (Number(product.precio) || 0);
@@ -124,14 +146,13 @@ const POS: React.FC<POSProps> = ({ user }) => {
     const discountPercent = getDiscountPercentage(product);
     const finalPrice = basePrice * (1 - discountPercent / 100);
     
-    const existing = cart.find(item => item.product.id === product.id && item.saleMode === mode);
+    const existingIndex = cart.findIndex(item => item.product.id === product.id && item.saleMode === mode);
     
-    if (existing) {
-      if (existing.cantidad < product.stock) {
-        updateQuantity(product.id, mode, 1);
-      } else {
-        alert("Stock máximo alcanzado");
-      }
+    if (existingIndex >= 0) {
+       // Actualizar cantidad existente
+       const newCart = [...cart];
+       newCart[existingIndex].cantidad += 1;
+       setCart(newCart);
     } else {
       setCart([...cart, { 
         product, 
@@ -139,19 +160,45 @@ const POS: React.FC<POSProps> = ({ user }) => {
         saleMode: mode, 
         originalPrice: basePrice, 
         finalPrice, 
-        discountApplied: discountPercent 
+        discountApplied: discountPercent,
+        unitsPerBox
       }]);
     }
   };
 
   const updateQuantity = (productId: number, mode: string, delta: number) => {
-    setCart(prev => prev.map(item => {
-      if (item.product.id === productId && item.saleMode === mode) {
-        const newQty = Math.max(0, item.cantidad + delta);
-        return { ...item, cantidad: newQty };
-      }
-      return item;
-    }).filter(item => item.cantidad > 0));
+    setCart(prev => {
+        const itemIndex = prev.findIndex(item => item.product.id === productId && item.saleMode === mode);
+        if (itemIndex === -1) return prev;
+
+        const currentItem = prev[itemIndex];
+        const newQty = currentItem.cantidad + delta;
+
+        if (newQty <= 0) {
+            return prev.filter((_, i) => i !== itemIndex);
+        }
+
+        // Validación de Stock al incrementar
+        if (delta > 0) {
+             const product = currentItem.product;
+             const unitsNeeded = (mode === 'caja' ? currentItem.unitsPerBox : 1);
+             // Calcular todo lo reservado EXCLUYENDO la cantidad actual de ESTE item para recalcular con el nuevo valor
+             const otherReserved = prev
+                .filter((i, idx) => idx !== itemIndex && i.product.id === productId)
+                .reduce((acc, i) => acc + (i.cantidad * (i.saleMode === 'caja' ? i.unitsPerBox : 1)), 0);
+             
+             const totalAfterUpdate = otherReserved + (newQty * unitsNeeded);
+
+             if (totalAfterUpdate > product.stock) {
+                 alert("Stock máximo alcanzado para este producto.");
+                 return prev;
+             }
+        }
+
+        const newCart = [...prev];
+        newCart[itemIndex] = { ...currentItem, cantidad: newQty };
+        return newCart;
+    });
   };
 
   const removeFromCart = (productId: number, mode: string) => {
@@ -186,8 +233,10 @@ const POS: React.FC<POSProps> = ({ user }) => {
       const { error: saleError } = await supabase.from('ventas').insert(salesToInsert);
       if (saleError) throw saleError;
 
+      // Descontar del inventario (unidades atómicas)
       for (const item of cart) {
-        await supabase.rpc('deduct_stock', { p_id: item.product.id, p_qty: item.cantidad });
+        const qtyToDeduct = item.cantidad * (item.saleMode === 'caja' ? item.unitsPerBox : 1);
+        await supabase.rpc('deduct_stock', { p_id: item.product.id, p_qty: qtyToDeduct });
       }
 
       setShowOrderSummary({ 
@@ -238,6 +287,15 @@ const POS: React.FC<POSProps> = ({ user }) => {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:overflow-y-auto custom-scrollbar flex-1 pb-20 pr-1">
             {filteredProducts.map(product => {
               const mode = saleModes[product.id] || 'caja';
+              const unitsPerBox = product.unidades_por_caja || 1;
+              
+              // Calcular Stock Real Disponible (Total - En Carrito)
+              const reserved = getReservedUnits(product.id);
+              const effectiveStock = Math.max(0, product.stock - reserved);
+              
+              const boxesAvailable = Math.floor(effectiveStock / unitsPerBox);
+              const unitsAvailable = effectiveStock % unitsPerBox;
+
               const basePrice = mode === 'unidad' 
                 ? (Number(product.precio_unidad) || 0)
                 : (Number(product.precio) || 0);
@@ -256,7 +314,6 @@ const POS: React.FC<POSProps> = ({ user }) => {
                   <div>
                     <h4 className="font-black text-slate-900 text-xs uppercase leading-tight pr-2 mb-1 truncate">{product.nombre}</h4>
                     
-                    {/* DESCRIPCIÓN AÑADIDA */}
                     <p className="text-[9px] text-slate-400 font-medium mb-2 line-clamp-2 leading-relaxed lowercase first-letter:uppercase">
                       {product.descripcion || 'Sin descripción detallada'}
                     </p>
@@ -268,9 +325,29 @@ const POS: React.FC<POSProps> = ({ user }) => {
                        </div>
                     </div>
 
-                    <div className="flex items-center gap-2 mb-3">
-                       <span className={`w-1.5 h-1.5 rounded-full ${product.stock < 10 ? 'bg-rose-500 animate-pulse' : 'bg-emerald-500'}`}></span>
-                       <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tight">Stock: {product.stock}</p>
+                    <div className={`flex items-center gap-2 mb-3 p-2 rounded-xl border ${effectiveStock <= (unitsPerBox * 2) ? 'bg-rose-50 border-rose-100' : 'bg-slate-50 border-slate-100'}`}>
+                       <span className={`w-2 h-2 rounded-full ${effectiveStock < (unitsPerBox * 2) ? 'bg-rose-500 animate-pulse' : 'bg-emerald-500'}`}></span>
+                       <div className="flex flex-col w-full">
+                          <div className="flex justify-between items-center w-full">
+                             <p className="text-[9px] font-black text-slate-600 uppercase tracking-tight">
+                               Disp: {effectiveStock} Unid
+                             </p>
+                             {product.tipo === 'pastillas' && (
+                                <span className="text-[8px] font-bold text-indigo-500 uppercase">
+                                   (1 Caja = {unitsPerBox}u)
+                                </span>
+                             )}
+                          </div>
+                          {product.tipo === 'pastillas' ? (
+                             <p className="text-[10px] font-black text-slate-800 uppercase tracking-tight mt-0.5">
+                               {boxesAvailable} Cajas / {unitsAvailable} Unid
+                             </p>
+                          ) : (
+                             <div className="h-1 bg-slate-200 rounded-full mt-1 overflow-hidden w-full">
+                                <div className="h-full bg-emerald-500" style={{ width: `${Math.min(100, (effectiveStock / 50) * 100)}%` }}></div>
+                             </div>
+                          )}
+                       </div>
                     </div>
                   </div>
 
@@ -297,7 +374,13 @@ const POS: React.FC<POSProps> = ({ user }) => {
                         </div>
                       )}
                     </div>
-                    <button onClick={() => addToCart(product)} className="w-full py-3 bg-slate-950 text-white rounded-xl text-[9px] font-black uppercase hover:bg-emerald-600 active:scale-95 transition-all shadow-lg">+ Agregar</button>
+                    <button 
+                      onClick={() => addToCart(product)} 
+                      disabled={effectiveStock <= 0}
+                      className="w-full py-3 bg-slate-950 text-white rounded-xl text-[9px] font-black uppercase hover:bg-emerald-600 active:scale-95 transition-all shadow-lg disabled:opacity-50 disabled:active:scale-100"
+                    >
+                      {effectiveStock > 0 ? '+ Agregar' : 'Agotado'}
+                    </button>
                   </div>
                 </div>
               );

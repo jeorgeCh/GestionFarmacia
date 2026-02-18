@@ -45,6 +45,7 @@ export interface Producto {
   precio: number; 
   precio_unidad: number; 
   stock: number; 
+  unidades_por_caja: number; // Nuevo campo
   ubicacion?: string;
   fecha_vencimiento?: string;
   created_at: string;

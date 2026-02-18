@@ -12,6 +12,7 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
   const [providers, setProviders] = useState<Proveedor[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<Producto | null>(null);
+  const [recentIncomes, setRecentIncomes] = useState<any[]>([]); // Estado para historial
   const searchInputRef = useRef<HTMLInputElement>(null);
   const quantityInputRef = useRef<HTMLInputElement>(null);
   
@@ -20,10 +21,12 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const scanIntervalRef = useRef<number | null>(null);
 
+  // ESTADO ACTUALIZADO PARA CAJAS Y UNIDADES
   const [formData, setFormData] = useState({
     proveedor_id: '',
-    cantidad: 1, // Cantidad que trae el lote (Unidades totales)
-    costo_total: 0, // Cuánto cuesta comprarlo (Total factura)
+    cantidad_cajas: 1,      // Cuántas cajas llegaron
+    unidades_por_caja: 1,   // Cuántas pastillas/unidades trae cada caja
+    costo_caja: 0,          // Cuánto costó cada caja
     lote: '',
     laboratorio: '',
     fecha_vencimiento: ''
@@ -41,12 +44,17 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
 
   const fetchData = async () => {
     try {
-      const [pRes, prRes] = await Promise.all([
+      const [pRes, prRes, iRes] = await Promise.all([
         supabase.from('productos').select('*').order('nombre', { ascending: true }),
-        supabase.from('proveedores').select('*').order('nombre', { ascending: true })
+        supabase.from('proveedores').select('*').order('nombre', { ascending: true }),
+        supabase.from('ingresos')
+          .select('*, productos(nombre, unidades_por_caja, laboratorio), proveedores(nombre)')
+          .order('fecha', { ascending: false })
+          .limit(10)
       ]);
       if (pRes.data) setProducts(pRes.data);
       if (prRes.data) setProviders(prRes.data);
+      if (iRes.data) setRecentIncomes(iRes.data);
     } catch (e) {
       console.error("Fetch Data Error:", e);
     }
@@ -88,16 +96,23 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
     setIsScanning(false);
   };
 
-  // Cálculo del Costo Unitario basado en el Total de Compra / Cantidad
-  const costoUnitarioCalculado = formData.cantidad > 0 ? formData.costo_total / formData.cantidad : 0;
+  // CÁLCULOS AUTOMÁTICOS
+  const totalUnidadesReales = formData.cantidad_cajas * formData.unidades_por_caja;
+  const costoTotalCompra = formData.cantidad_cajas * formData.costo_caja;
+  const costoUnitarioReal = formData.unidades_por_caja > 0 ? (formData.costo_caja / formData.unidades_por_caja) : 0;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
 
     // VALIDACIÓN ESTRICTA
-    if (!selectedProduct || !formData.proveedor_id || !formData.lote.trim() || !formData.fecha_vencimiento || formData.costo_total <= 0) {
-      setFormError("⚠️ COMPLETA TODOS LOS CAMPOS: Proveedor, Cantidad, Costo Total, Lote y Vencimiento son obligatorios.");
+    if (!selectedProduct || !formData.proveedor_id || !formData.lote.trim() || !formData.fecha_vencimiento) {
+      setFormError("⚠️ FALTAN DATOS: Revisa Proveedor, Lote y Vencimiento.");
+      return;
+    }
+
+    if (formData.cantidad_cajas <= 0 || formData.unidades_por_caja <= 0 || formData.costo_caja <= 0) {
+      setFormError("⚠️ VALORES INVÁLIDOS: Cajas, Unidades y Costo deben ser mayores a 0.");
       return;
     }
     
@@ -107,9 +122,9 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
         usuario_id: user.id,
         producto_id: selectedProduct.id,
         proveedor_id: Number(formData.proveedor_id),
-        cantidad: formData.cantidad,
-        costo_unitario: costoUnitarioCalculado, 
-        total: formData.costo_total,
+        cantidad: totalUnidadesReales, // Guardamos el total de unidades sueltas para el stock
+        costo_unitario: costoUnitarioReal, 
+        total: costoTotalCompra,
         lote: formData.lote.trim().toUpperCase(),
         fecha_vencimiento: formData.fecha_vencimiento || null
       });
@@ -117,25 +132,37 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
       if (incomeError) throw incomeError;
 
       const updatePayload: any = {};
+      
+      // Actualizamos datos del producto si cambiaron
       if (formData.fecha_vencimiento && formData.fecha_vencimiento !== (selectedProduct.fecha_vencimiento?.split('T')[0])) {
         updatePayload.fecha_vencimiento = formData.fecha_vencimiento;
       }
       if (formData.laboratorio && formData.laboratorio.trim().toUpperCase() !== selectedProduct.laboratorio) {
         updatePayload.laboratorio = formData.laboratorio.trim().toUpperCase();
       }
+      // Actualizamos la configuración de unidades por caja del producto maestro
+      updatePayload.unidades_por_caja = formData.unidades_por_caja;
       
       if (Object.keys(updatePayload).length > 0) {
         await supabase.from('productos').update(updatePayload).eq('id', selectedProduct.id);
       }
       
-      // Stock aumenta
-      await supabase.rpc('deduct_stock', { p_id: selectedProduct.id, p_qty: -formData.cantidad });
+      // Stock aumenta (se pasa negativo a deduct_stock para sumar)
+      await supabase.rpc('deduct_stock', { p_id: selectedProduct.id, p_qty: -totalUnidadesReales });
 
       setSuccess(true);
-      setFormData({ proveedor_id: '', cantidad: 1, costo_total: 0, lote: '', laboratorio: '', fecha_vencimiento: '' });
+      setFormData({ 
+        proveedor_id: '', 
+        cantidad_cajas: 1, 
+        unidades_por_caja: 1, 
+        costo_caja: 0, 
+        lote: '', 
+        laboratorio: '', 
+        fecha_vencimiento: '' 
+      });
       setSelectedProduct(null);
       setSearchTerm('');
-      fetchData(); 
+      fetchData(); // Refresca lista de productos y el historial
       setTimeout(() => setSuccess(false), 3000);
     } catch (err: any) {
       setFormError(err.message || "Error al procesar ingreso");
@@ -154,7 +181,16 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
   const handleSelectProduct = (p: Producto) => {
     setSelectedProduct(p);
     setSearchTerm('');
-    setFormData({ proveedor_id: '', cantidad: 1, costo_total: 0, lote: '', fecha_vencimiento: p.fecha_vencimiento ? p.fecha_vencimiento.split('T')[0] : '', laboratorio: p.laboratorio || '' });
+    // Al seleccionar, precargamos unidades_por_caja si ya existe
+    setFormData({ 
+      proveedor_id: '', 
+      cantidad_cajas: 1, 
+      unidades_por_caja: p.unidades_por_caja || 1, 
+      costo_caja: 0, 
+      lote: '', 
+      fecha_vencimiento: p.fecha_vencimiento ? p.fecha_vencimiento.split('T')[0] : '', 
+      laboratorio: p.laboratorio || '' 
+    });
     setTimeout(() => { if (quantityInputRef.current) quantityInputRef.current.focus(); }, 250);
   };
 
@@ -252,33 +288,44 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
                     <input type="date" required className="w-full px-6 py-4 rounded-2xl border-2 border-slate-100 bg-white font-bold text-slate-700 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all" value={formData.fecha_vencimiento} onChange={e => setFormData({...formData, fecha_vencimiento: e.target.value})} />
                  </div>
 
+                 {/* NUEVOS CAMPOS PARA CAJAS */}
                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Cantidad del Lote (Unidades) *</label>
-                    <input ref={quantityInputRef} type="number" required min="1" className="w-full px-6 py-4 rounded-2xl border-2 border-slate-100 bg-white font-black text-xl text-slate-900 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all" placeholder="0" value={formData.cantidad} onChange={e => setFormData({...formData, cantidad: Number(e.target.value)})} />
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Cantidad de Cajas *</label>
+                    <input ref={quantityInputRef} type="number" required min="1" className="w-full px-6 py-4 rounded-2xl border-2 border-slate-100 bg-white font-black text-xl text-slate-900 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all" placeholder="0" value={formData.cantidad_cajas} onChange={e => setFormData({...formData, cantidad_cajas: Number(e.target.value)})} />
                  </div>
 
                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Costo Total Compra ($) *</label>
-                    <input type="number" required step="0.01" className="w-full px-6 py-4 rounded-2xl border-2 border-slate-100 bg-white font-black text-xl text-slate-900 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all" placeholder="0.00" value={formData.costo_total} onChange={e => setFormData({...formData, costo_total: Number(e.target.value)})} />
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Unidades por Caja *</label>
+                    <input type="number" required min="1" className="w-full px-6 py-4 rounded-2xl border-2 border-slate-100 bg-white font-black text-xl text-slate-900 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all" placeholder="1" value={formData.unidades_por_caja} onChange={e => setFormData({...formData, unidades_por_caja: Number(e.target.value)})} />
                  </div>
 
                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Costo por Caja ($) *</label>
+                    <input type="number" required step="0.01" className="w-full px-6 py-4 rounded-2xl border-2 border-slate-100 bg-white font-black text-xl text-slate-900 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all" placeholder="0.00" value={formData.costo_caja} onChange={e => setFormData({...formData, costo_caja: Number(e.target.value)})} />
+                 </div>
+
+                 <div className="md:col-span-3 space-y-2">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Lab / Fabricante (Opcional)</label>
                     <input type="text" className="w-full px-6 py-4 rounded-2xl border-2 border-slate-100 bg-white font-black uppercase text-slate-700 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-500/10 outline-none placeholder:text-slate-300 transition-all" value={formData.laboratorio} onChange={e => setFormData({...formData, laboratorio: e.target.value})} />
                  </div>
               </div>
 
-              {/* Resumen de Costos y Acciones */}
+              {/* Resumen de Costos CALCULADO */}
               <div className="bg-slate-900 rounded-[2.5rem] p-8 flex flex-col lg:flex-row justify-between items-center gap-8 shadow-xl shadow-slate-900/20">
-                 <div className="flex items-center gap-8 w-full lg:w-auto text-white">
+                 <div className="flex flex-col sm:flex-row items-center gap-8 w-full lg:w-auto text-white text-center sm:text-left">
                     <div>
-                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Costo Unitario Calc.</p>
-                       <p className="text-2xl font-black tracking-tight text-white">${costoUnitarioCalculado.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
+                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Costo Unitario (Pastilla)</p>
+                       <p className="text-xl font-black tracking-tight text-white">${costoUnitarioReal.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
                     </div>
-                    <div className="h-10 w-px bg-slate-700"></div>
+                    <div className="h-10 w-px bg-slate-700 hidden sm:block"></div>
+                     <div>
+                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Unidades a Ingresar</p>
+                       <p className="text-xl font-black tracking-tight text-white">{totalUnidadesReales}</p>
+                    </div>
+                    <div className="h-10 w-px bg-slate-700 hidden sm:block"></div>
                     <div>
-                       <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-1">Total a Pagar</p>
-                       <p className="text-3xl font-black text-emerald-400 tracking-tighter">${formData.costo_total.toLocaleString()}</p>
+                       <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-1">Costo Total Factura</p>
+                       <p className="text-3xl font-black text-emerald-400 tracking-tighter">${costoTotalCompra.toLocaleString()}</p>
                     </div>
                  </div>
 
@@ -319,6 +366,60 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
           )}
         </div>
       </div>
+      
+      {/* HISTORIAL DE INGRESOS */}
+      {!selectedProduct && recentIncomes.length > 0 && (
+        <div className="mt-12">
+           <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight mb-6 px-4">Historial de Ingresos Recientes</h3>
+           <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
+             <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                   <thead>
+                      <tr className="bg-slate-50 border-b border-slate-100">
+                         <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Fecha</th>
+                         <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Producto</th>
+                         <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Lote</th>
+                         <th className="px-8 py-5 text-[10px] font-black text-emerald-600 uppercase tracking-widest text-center">Cajas Ingresadas</th>
+                         <th className="px-8 py-5 text-[10px] font-black text-indigo-600 uppercase tracking-widest text-right">Total Unidades</th>
+                      </tr>
+                   </thead>
+                   <tbody className="divide-y divide-slate-50">
+                      {recentIncomes.map((income) => {
+                         const unitsPerBox = income.productos?.unidades_por_caja || 1;
+                         // Calculamos cajas basado en la configuración actual del producto
+                         const boxes = (income.cantidad / unitsPerBox);
+                         const isExact = Number.isInteger(boxes);
+                         
+                         return (
+                            <tr key={income.id} className="hover:bg-slate-50/50">
+                               <td className="px-8 py-4">
+                                  <p className="text-xs font-bold text-slate-600">{new Date(income.fecha).toLocaleDateString()}</p>
+                                  <p className="text-[9px] font-bold text-slate-400 uppercase">{new Date(income.fecha).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+                               </td>
+                               <td className="px-8 py-4">
+                                  <p className="text-sm font-black text-slate-900 uppercase">{income.productos?.nombre || 'Producto Eliminado'}</p>
+                                  <p className="text-[9px] font-bold text-slate-400 uppercase">{income.proveedores?.nombre || 'Proveedor Eliminado'}</p>
+                               </td>
+                               <td className="px-8 py-4">
+                                  <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest">{income.lote}</span>
+                               </td>
+                               <td className="px-8 py-4 text-center">
+                                  <div className="inline-block bg-emerald-50 text-emerald-700 border border-emerald-100 px-3 py-1 rounded-xl text-xs font-black">
+                                     {isExact ? boxes : boxes.toFixed(1)} Cajas
+                                  </div>
+                               </td>
+                               <td className="px-8 py-4 text-right">
+                                  <p className="text-sm font-black text-indigo-900">{income.cantidad}</p>
+                               </td>
+                            </tr>
+                         );
+                      })}
+                   </tbody>
+                </table>
+             </div>
+           </div>
+        </div>
+      )}
     </div>
   );
 };

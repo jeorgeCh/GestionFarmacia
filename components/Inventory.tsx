@@ -27,6 +27,7 @@ const Inventory: React.FC<InventoryProps> = ({ user }) => {
     laboratorio: '',
     precio: '', 
     precio_unidad: '',
+    unidades_por_caja: '1', 
     descripcion: '',
     ubicacion: '',
     fecha_vencimiento: ''
@@ -41,6 +42,7 @@ const Inventory: React.FC<InventoryProps> = ({ user }) => {
 
   const fetchProducts = async () => {
     setLoading(true);
+    setSaveError(null);
     try {
       const { data, error } = await supabase
         .from('productos')
@@ -51,7 +53,11 @@ const Inventory: React.FC<InventoryProps> = ({ user }) => {
       if (data) setProducts(data);
     } catch (err: any) {
       console.error("Error al cargar productos:", err);
-      setSaveError("Error de sincronización con la base de datos.");
+      if (err.message && (err.message.includes('fetch') || err.message.includes('network'))) {
+         setSaveError("⚠️ Sin conexión a internet. Revisa tu red.");
+      } else {
+         setSaveError("Error cargando inventario. Intenta recargar.");
+      }
     } finally {
       setLoading(false);
     }
@@ -111,6 +117,7 @@ const Inventory: React.FC<InventoryProps> = ({ user }) => {
         laboratorio: p.laboratorio || '',
         precio: String(p.precio || ''),
         precio_unidad: String(p.precio_unidad || ''),
+        unidades_por_caja: String(p.unidades_por_caja || 1),
         descripcion: p.descripcion || '',
         ubicacion: p.ubicacion || '',
         fecha_vencimiento: p.fecha_vencimiento ? p.fecha_vencimiento.split('T')[0] : ''
@@ -118,7 +125,7 @@ const Inventory: React.FC<InventoryProps> = ({ user }) => {
     } else {
       setFormData({ 
         id: undefined, tipo: 'producto', nombre: '', codigo_barras: '', 
-        laboratorio: '', precio: '', precio_unidad: '', 
+        laboratorio: '', precio: '', precio_unidad: '', unidades_por_caja: '1',
         descripcion: '', ubicacion: '', fecha_vencimiento: '' 
       });
     }
@@ -129,24 +136,15 @@ const Inventory: React.FC<InventoryProps> = ({ user }) => {
     e.preventDefault();
     if (isSaving) return;
 
-    // VALIDACIÓN ESTRICTA: BLOQUEO SI FALTA CUALQUIER CAMPO
-    const { nombre, codigo_barras, laboratorio, precio, ubicacion, descripcion, fecha_vencimiento, tipo, precio_unidad } = formData;
+    const { nombre, codigo_barras, laboratorio, precio, ubicacion, descripcion, fecha_vencimiento, tipo, precio_unidad, unidades_por_caja } = formData;
     
-    if (
-      !nombre.trim() || 
-      !codigo_barras.trim() || 
-      !laboratorio.trim() || 
-      !precio || 
-      !ubicacion.trim() || 
-      !descripcion.trim() || 
-      !fecha_vencimiento
-    ) {
-      setSaveError("⚠️ CAMPOS FALTANTES: Debes completar Nombre, Laboratorio, Código, Precio, Ubicación, Descripción y Vencimiento.");
+    if (!nombre.trim() || !codigo_barras.trim() || !laboratorio.trim() || !precio || !ubicacion.trim() || !descripcion.trim() || !fecha_vencimiento) {
+      setSaveError("⚠️ Faltan campos obligatorios.");
       return;
     }
 
-    if (tipo === 'pastillas' && !precio_unidad) {
-      setSaveError("⚠️ PRECIO FRACCIÓN: Es obligatorio para productos tipo Pastillas.");
+    if (tipo === 'pastillas' && (!precio_unidad || Number(unidades_por_caja) < 1)) {
+      setSaveError("⚠️ Faltan datos de caja/unidades.");
       return;
     }
 
@@ -163,7 +161,8 @@ const Inventory: React.FC<InventoryProps> = ({ user }) => {
         ubicacion: formData.ubicacion.trim().toUpperCase(),
         fecha_vencimiento: formData.fecha_vencimiento,
         precio: parseFloat(formData.precio),
-        precio_unidad: formData.tipo === 'pastillas' ? parseFloat(formData.precio_unidad) : 0
+        precio_unidad: formData.tipo === 'pastillas' ? parseFloat(formData.precio_unidad) : 0,
+        unidades_por_caja: parseFloat(formData.unidades_por_caja) || 1
       };
 
       if (formData.id) {
@@ -178,7 +177,13 @@ const Inventory: React.FC<InventoryProps> = ({ user }) => {
       fetchProducts();
     } catch (err: any) {
       console.error("Save Error:", err);
-      setSaveError("Error de servidor: " + (err.message || "Verifica la conexión"));
+      if (err.message && err.message.includes('unidades_por_caja')) {
+        setSaveError("🚨 ERROR: Actualiza la base de datos.");
+      } else if (err.message && (err.message.includes('fetch') || err.message.includes('network'))) {
+        setSaveError("⚠️ Error de conexión.");
+      } else {
+        setSaveError("Error: " + (err.message || "No se pudo guardar"));
+      }
     } finally {
       setIsSaving(false);
     }
@@ -192,6 +197,8 @@ const Inventory: React.FC<InventoryProps> = ({ user }) => {
 
   return (
     <div className="space-y-6 animate-slide-up pb-10">
+      
+      {/* Barra de Búsqueda y Acción */}
       <div className="flex flex-col lg:flex-row justify-between items-center gap-4 bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100">
         <div className="relative flex-1 w-full">
           <input
@@ -212,7 +219,13 @@ const Inventory: React.FC<InventoryProps> = ({ user }) => {
         )}
       </div>
 
+      {/* Tabla de Productos */}
       <div className="bg-white rounded-[3rem] shadow-sm border border-slate-100 overflow-hidden">
+        {saveError && !showModal && (
+           <div className="p-4 bg-rose-50 text-rose-600 text-center font-black text-xs uppercase cursor-pointer hover:bg-rose-100" onClick={fetchProducts}>
+             {saveError} - Click para reintentar
+           </div>
+        )}
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
@@ -220,48 +233,72 @@ const Inventory: React.FC<InventoryProps> = ({ user }) => {
                 <th className="px-6 py-6 pl-10">Medicamento</th>
                 <th className="px-6 py-6">Descripción</th>
                 <th className="px-6 py-6 text-center">Ubicación</th>
-                <th className="px-6 py-6 text-center">Stock</th>
-                <th className="px-6 py-6 text-right">Precio</th>
+                <th className="px-4 py-6 text-center text-emerald-400">Cajas Completas</th>
+                <th className="px-4 py-6 text-center text-indigo-400">Stock Total (Unidades)</th>
+                <th className="px-6 py-6 text-right">Precio Caja</th>
                 <th className="px-10 py-6 text-center">Acción</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {loading ? (
-                <tr><td colSpan={6} className="py-20 text-center font-black uppercase text-slate-300">Cargando datos...</td></tr>
-              ) : filteredProducts.map(p => (
-                <tr key={p.id} className="hover:bg-slate-50/50 transition-all group">
-                  <td className="px-6 py-6 pl-10">
-                    <div className="font-black text-slate-900 uppercase text-xs mb-0.5">{p.nombre}</div>
-                    <div className="text-[9px] text-slate-400 font-bold uppercase">Lab: {p.laboratorio}</div>
-                  </td>
-                  <td className="px-6 py-6">
-                    <div className="text-[9px] text-slate-500 bg-slate-100 px-3 py-1.5 rounded-xl inline-block max-w-[200px] lg:max-w-[300px] truncate italic border border-slate-200">
-                      {p.descripcion || 'Sin descripción'}
-                    </div>
-                  </td>
-                  <td className="px-6 py-6 text-center">
-                    <span className="px-3 py-1 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-lg text-[9px] font-black uppercase whitespace-nowrap">
-                      📍 {p.ubicacion}
-                    </span>
-                  </td>
-                  <td className="px-6 py-6 text-center">
-                    <span className={`px-4 py-1.5 rounded-2xl text-[11px] font-black border ${p.stock <= 5 ? 'bg-rose-50 text-rose-600 border-rose-100' : 'bg-slate-100 text-slate-600'}`}>
-                      {p.stock}
-                    </span>
-                  </td>
-                  <td className="px-6 py-6 text-right font-black text-slate-900 text-sm whitespace-nowrap">${p.precio.toLocaleString()}</td>
-                  <td className="px-10 py-6 text-center">
-                    <button onClick={() => handleOpenModal(p)} className="p-3 bg-slate-100 text-slate-400 rounded-xl hover:bg-slate-950 hover:text-white transition-all">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                <tr><td colSpan={7} className="py-20 text-center font-black uppercase text-slate-300">Cargando inventario...</td></tr>
+              ) : filteredProducts.length === 0 ? (
+                <tr><td colSpan={7} className="py-20 text-center font-black uppercase text-slate-300">No se encontraron productos</td></tr>
+              ) : filteredProducts.map(p => {
+                const safeStock = Math.max(0, p.stock);
+                const unitsPerBox = Math.max(1, p.unidades_por_caja || 1);
+                
+                // Cálculo de Cajas
+                const boxes = Math.floor(safeStock / unitsPerBox);
+
+                return (
+                  <tr key={p.id} className="hover:bg-slate-50/50 transition-all group">
+                    <td className="px-6 py-6 pl-10">
+                      <div className="font-black text-slate-900 uppercase text-xs mb-0.5">{p.nombre}</div>
+                      <div className="text-[9px] text-slate-400 font-bold uppercase">Lab: {p.laboratorio}</div>
+                    </td>
+                    <td className="px-6 py-6">
+                      <div className="text-[9px] text-slate-500 bg-slate-100 px-3 py-1.5 rounded-xl inline-block max-w-[200px] lg:max-w-[300px] truncate italic border border-slate-200">
+                        {p.descripcion || 'Sin descripción'}
+                      </div>
+                    </td>
+                    <td className="px-6 py-6 text-center">
+                      <span className="px-3 py-1 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-lg text-[9px] font-black uppercase whitespace-nowrap">
+                        📍 {p.ubicacion}
+                      </span>
+                    </td>
+                    
+                    {/* COLUMNA CAJAS (CALCULADO) */}
+                    <td className="px-4 py-6 text-center">
+                      <div className={`inline-flex items-center justify-center px-4 py-2 rounded-xl border ${boxes === 0 ? 'bg-slate-50 text-slate-300 border-slate-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'}`}>
+                         <span className="text-sm font-black mr-1">{boxes}</span>
+                         <span className="text-[9px] font-bold uppercase opacity-70">{p.tipo === 'pastillas' ? 'Cajas' : 'Empaques'}</span>
+                      </div>
+                    </td>
+
+                    {/* COLUMNA STOCK TOTAL REAL */}
+                    <td className="px-4 py-6 text-center">
+                       <div className={`inline-flex items-center justify-center px-4 py-2 rounded-xl border ${safeStock === 0 ? 'bg-rose-50 text-rose-500 border-rose-100' : 'bg-indigo-50 text-indigo-600 border-indigo-100'}`}>
+                         <span className="text-sm font-black mr-1">{safeStock}</span>
+                         <span className="text-[9px] font-bold uppercase opacity-70">Unid.</span>
+                       </div>
+                    </td>
+
+                    <td className="px-6 py-6 text-right font-black text-slate-900 text-sm whitespace-nowrap">${p.precio.toLocaleString()}</td>
+                    <td className="px-10 py-6 text-center">
+                      <button onClick={() => handleOpenModal(p)} className="p-3 bg-slate-100 text-slate-400 rounded-xl hover:bg-slate-950 hover:text-white transition-all">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       </div>
 
+      {/* Modal de Edición/Creación */}
       {showModal && (
         <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[100] p-4 animate-in fade-in">
           <div className="bg-white rounded-[3.5rem] w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
@@ -302,20 +339,26 @@ const Inventory: React.FC<InventoryProps> = ({ user }) => {
 
                 <div className="md:col-span-2 p-6 bg-white rounded-3xl border border-slate-100 shadow-sm space-y-6">
                   <div className="flex gap-2">
-                    <button type="button" onClick={() => setFormData({...formData, tipo: 'producto'})} className={`flex-1 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${formData.tipo === 'producto' ? 'bg-slate-950 text-white' : 'bg-slate-50 text-slate-400'}`}>Empaque General</button>
+                    <button type="button" onClick={() => setFormData({...formData, tipo: 'producto', unidades_por_caja: '1'})} className={`flex-1 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${formData.tipo === 'producto' ? 'bg-slate-950 text-white' : 'bg-slate-50 text-slate-400'}`}>Empaque General</button>
                     <button type="button" onClick={() => setFormData({...formData, tipo: 'pastillas'})} className={`flex-1 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${formData.tipo === 'pastillas' ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-400'}`}>Por Pastillas</button>
                   </div>
                   
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className={`grid ${formData.tipo === 'pastillas' ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1'} gap-4`}>
                     <div className="space-y-2">
-                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Precio al Público *</label>
+                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Precio Caja/Pack *</label>
                       <input type="number" className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-black text-lg focus:bg-white outline-none" value={formData.precio} onChange={e => setFormData({...formData, precio: e.target.value})} placeholder="0.00" />
                     </div>
                     {formData.tipo === 'pastillas' && (
-                      <div className="space-y-2">
-                        <label className="text-[9px] font-black text-indigo-400 uppercase tracking-widest block">Precio Fracción *</label>
-                        <input type="number" className="w-full px-6 py-4 bg-indigo-50/30 rounded-2xl font-black text-lg focus:bg-white outline-none" value={formData.precio_unidad} onChange={e => setFormData({...formData, precio_unidad: e.target.value})} placeholder="0.00" />
-                      </div>
+                      <>
+                        <div className="space-y-2">
+                          <label className="text-[9px] font-black text-indigo-400 uppercase tracking-widest block">Unidades en Caja</label>
+                          <input type="number" className="w-full px-6 py-4 bg-indigo-50/30 rounded-2xl font-black text-lg focus:bg-white outline-none" value={formData.unidades_por_caja} onChange={e => setFormData({...formData, unidades_por_caja: e.target.value})} placeholder="EJ: 10" />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[9px] font-black text-indigo-400 uppercase tracking-widest block">Precio Unidad</label>
+                          <input type="number" className="w-full px-6 py-4 bg-indigo-50/30 rounded-2xl font-black text-lg focus:bg-white outline-none" value={formData.precio_unidad} onChange={e => setFormData({...formData, precio_unidad: e.target.value})} placeholder="0.00" />
+                        </div>
+                      </>
                     )}
                   </div>
                 </div>
