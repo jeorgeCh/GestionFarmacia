@@ -277,6 +277,7 @@ const POS: React.FC<POSProps> = ({ user }) => {
   return (
     <div className="relative lg:h-[calc(100vh-140px)] h-auto animate-slide-up">
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-full">
+        {/* PANEL IZQUIERDO: PRODUCTOS */}
         <div className="lg:col-span-7 flex flex-col space-y-4 lg:h-full min-h-[500px]">
           <div className="relative group shrink-0">
             <input
@@ -293,82 +294,114 @@ const POS: React.FC<POSProps> = ({ user }) => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:overflow-y-auto custom-scrollbar flex-1 pb-20 pr-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 lg:overflow-y-auto custom-scrollbar flex-1 pb-20 pr-1 content-start">
             {filteredProducts.map(product => {
               const unitsPerBox = product.unidades_por_caja || 1;
               const mode = unitsPerBox === 1 ? 'unidad' : (saleModes[product.id] || 'unidad');
               
               const reservedInUnits = getReservedUnits(product.id);
               const effectiveStockInUnits = Math.max(0, product.stock - reservedInUnits);
+              
+              // CÁLCULO DE CAJAS Y UNIDADES
               const boxesAvailable = Math.floor(effectiveStockInUnits / unitsPerBox);
+              const unitsAvailable = effectiveStockInUnits % unitsPerBox;
               
               const basePrice = mode === 'unidad' ? (Number(product.precio_unidad) || 0) : (Number(product.precio) || 0);
               const discountPercent = getDiscountPercentage(product);
               const finalPrice = basePrice * (1 - discountPercent / 100);
 
               return (
-                <div key={product.id} className={`bg-white p-5 rounded-[2rem] border-2 shadow-sm hover:shadow-xl transition-all group flex flex-col justify-between relative overflow-hidden ${discountPercent > 0 ? 'border-rose-100 shadow-md' : 'border-slate-50'}`}>
+                <div key={product.id} className={`bg-white p-4 rounded-[1.5rem] border hover:border-indigo-300 transition-all group flex flex-col justify-between relative overflow-hidden shadow-sm hover:shadow-lg ${discountPercent > 0 ? 'border-rose-200' : 'border-slate-100'}`}>
                   {discountPercent > 0 && (
-                    <div className="absolute top-0 right-0 bg-rose-500 text-white px-3 py-1.5 rounded-bl-2xl font-black text-[9px] uppercase tracking-widest shadow-lg animate-pulse z-10">
+                    <div className="absolute top-0 right-0 bg-rose-500 text-white px-2 py-1 rounded-bl-xl font-black text-[9px] uppercase z-10 shadow-sm">
                       -{Math.round(discountPercent)}%
                     </div>
                   )}
-                  <div>
-                    <h4 className="font-black text-slate-900 text-xs uppercase leading-tight pr-2 mb-1 truncate">{product.nombre}</h4>
-                    <div className="flex flex-wrap items-center gap-2 mb-2">
-                       <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded-lg text-[8px] font-black uppercase border border-indigo-100">{product.laboratorio || 'S/L'}</span>
-                       <span className="text-[8px] font-black text-slate-600 uppercase tracking-tight px-2 py-0.5 bg-slate-50 border border-slate-100 rounded-lg">📍 {product.ubicacion || '---'}</span>
+                  
+                  <div className="mb-3">
+                    <div className="flex justify-between items-center mb-1">
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest truncate max-w-[90px]">{product.laboratorio || 'Generico'}</span>
+                        {unitsPerBox > 1 && (
+                             <span className="text-[8px] font-bold bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded border border-indigo-100 flex items-center gap-1">
+                                <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+                                Caja x {unitsPerBox}
+                             </span>
+                        )}
+                    </div>
+                    <h4 className="font-black text-slate-800 text-xs uppercase leading-snug line-clamp-2 min-h-[2.5em]" title={product.nombre}>{product.nombre}</h4>
+                    <span className="text-[9px] font-bold text-slate-300 uppercase flex items-center gap-1 mt-1">
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                        {product.ubicacion || 'General'}
+                    </span>
+                  </div>
+
+                  <div className="space-y-3">
+                    {/* Indicador de Stock Visual */}
+                    <div>
+                        <div className="flex justify-between items-end mb-1">
+                            <span className="text-[8px] font-bold text-slate-400 uppercase">Disponible</span>
+                            <span className={`text-[9px] font-black uppercase ${effectiveStockInUnits < 10 ? 'text-rose-500' : 'text-slate-600'}`}>
+                                {unitsPerBox > 1 
+                                    ? `${boxesAvailable} Cajas / ${unitsAvailable} Und` 
+                                    : `${effectiveStockInUnits} Unidades`
+                                }
+                            </span>
+                        </div>
+                        <div className={`w-full h-1.5 rounded-full overflow-hidden bg-slate-100`}>
+                          <div 
+                              className={`h-full rounded-full ${effectiveStockInUnits < 10 ? 'bg-rose-500' : 'bg-emerald-500'}`} 
+                              style={{width: `${Math.min((effectiveStockInUnits / 50) * 100, 100)}%`}}
+                          ></div>
+                        </div>
                     </div>
 
-                    {product.descripcion && (
-                      <p className="text-[10px] text-slate-500 font-medium italic mb-3 line-clamp-2 leading-tight bg-slate-50/50 p-2 rounded-xl">
-                        {product.descripcion}
-                      </p>
-                    )}
-                    
-                    <div className={`flex items-center gap-2 mb-3 p-3 rounded-2xl border ${effectiveStockInUnits <= 0 ? 'bg-rose-50 border-rose-100' : 'bg-slate-50 border-slate-100'}`}>
-                       <div className="flex flex-col w-full">
-                          <p className="text-[10px] font-black text-slate-900 uppercase tracking-tight">
-                            {mode === 'unidad' 
-                              ? `Disponible: ${effectiveStockInUnits} Unidades` 
-                              : `Disponible: ${boxesAvailable} Cajas (${effectiveStockInUnits} Unid total)`
-                            }
-                          </p>
-                       </div>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-between mb-3 bg-slate-50 p-3 rounded-xl border border-slate-100/50">
-                      <div className="flex flex-col">
-                        <span className="text-[8px] font-black text-slate-400 uppercase mb-0.5">PVP {mode === 'caja' ? 'Caja' : 'Unidad'}</span>
-                        <p className="font-black text-slate-900 text-lg tracking-tighter leading-none">${finalPrice.toLocaleString()}</p>
-                      </div>
-                      
-                      {unitsPerBox > 1 ? (
-                        <div className="flex bg-white rounded-lg p-1 border border-slate-200 shadow-inner h-fit">
-                          <button onClick={() => setSaleModes({...saleModes, [product.id]: 'unidad'})} className={`px-2 py-1 rounded-md text-[8px] font-black uppercase transition-all ${mode === 'unidad' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400'}`}>Unid</button>
-                          <button onClick={() => setSaleModes({...saleModes, [product.id]: 'caja'})} className={`px-2 py-1 rounded-md text-[8px] font-black uppercase transition-all ${mode === 'caja' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-400'}`}>Caja</button>
+                    {/* Precio y Toggle */}
+                    <div className="flex items-center justify-between bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                        <div className="flex flex-col">
+                          <span className="text-[8px] font-black text-slate-400 uppercase">Precio</span>
+                          <span className="text-sm font-black text-slate-900 leading-none">${finalPrice.toLocaleString()}</span>
                         </div>
-                      ) : (
-                         <div className="px-3 py-1 bg-slate-100 text-slate-400 rounded-lg border border-slate-200 text-[8px] font-black uppercase tracking-wider">
-                           Venta Individual
-                         </div>
-                      )}
+                        
+                        {unitsPerBox > 1 ? (
+                          <div className="flex bg-white rounded-lg p-0.5 shadow-sm border border-slate-200">
+                              <button 
+                                onClick={() => setSaleModes({...saleModes, [product.id]: 'unidad'})}
+                                className={`px-2 py-1.5 rounded-md text-[8px] font-black uppercase transition-all ${mode === 'unidad' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-300 hover:text-slate-500'}`}
+                              >
+                                Und
+                              </button>
+                              <button 
+                                onClick={() => setSaleModes({...saleModes, [product.id]: 'caja'})}
+                                className={`px-2 py-1.5 rounded-md text-[8px] font-black uppercase transition-all ${mode === 'caja' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-300 hover:text-slate-500'}`}
+                              >
+                                Caja
+                              </button>
+                          </div>
+                        ) : (
+                          <span className="text-[8px] font-black text-slate-300 uppercase px-2">Individual</span>
+                        )}
                     </div>
+
                     <button 
-                      onClick={() => addToCart(product)} 
-                      disabled={effectiveStockInUnits <= 0 || (mode === 'caja' && effectiveStockInUnits < unitsPerBox)} 
-                      className="w-full py-3 bg-slate-950 text-white rounded-xl text-[9px] font-black uppercase hover:bg-emerald-600 active:scale-95 transition-all shadow-lg disabled:opacity-50"
+                        onClick={() => addToCart(product)} 
+                        disabled={effectiveStockInUnits <= 0 || (mode === 'caja' && effectiveStockInUnits < unitsPerBox)} 
+                        className="w-full py-2.5 bg-slate-950 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 active:scale-95 transition-all shadow-lg disabled:opacity-50 disabled:shadow-none flex items-center justify-center gap-1"
                     >
-                      {effectiveStockInUnits <= 0 ? 'Agotado' : (mode === 'caja' && effectiveStockInUnits < unitsPerBox) ? 'Cajas Insuficientes' : '+ Agregar'}
+                        {effectiveStockInUnits <= 0 ? 'Agotado' : (mode === 'caja' && effectiveStockInUnits < unitsPerBox) ? 'Incompleto' : <>Agregar <span className="text-emerald-400">+</span></>}
                     </button>
                   </div>
                 </div>
               );
             })}
+            {filteredProducts.length === 0 && (
+              <div className="col-span-full py-20 text-center opacity-50">
+                 <p className="font-black text-slate-400 uppercase text-xs tracking-widest">No se encontraron productos</p>
+              </div>
+            )}
           </div>
         </div>
 
+        {/* PANEL DERECHO: CARRITO */}
         <div className="lg:col-span-5 flex flex-col bg-white lg:rounded-[2.5rem] shadow-xl border border-slate-100 overflow-hidden h-full rounded-t-[2.5rem] mt-4 lg:mt-0">
           <div className="p-5 bg-slate-900 text-white shrink-0 flex flex-col gap-4">
             <div className="flex justify-between items-start">
