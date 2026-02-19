@@ -1,7 +1,7 @@
 
 export interface Role {
   id: number;
-  nombre: 'admin' | 'vendedor';
+  nombre: 'admin' | 'vendedor' | 'super_usuario';
   descripcion?: string;
 }
 
@@ -14,6 +14,16 @@ export interface Usuario {
   activo: boolean;
   created_at: string;
   roles?: Role;
+}
+
+export interface AuditLog {
+  id: number;
+  usuario_id: number;
+  accion: string;
+  modulo: string;
+  detalles: string;
+  created_at: string;
+  usuarios?: Usuario;
 }
 
 export interface CierreDiario {

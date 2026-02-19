@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
-import { Producto, Usuario, Descuento } from '../types';
+import { Producto, Usuario } from '../types';
 
 interface POSProps {
   user: Usuario;
@@ -63,7 +63,7 @@ const POS: React.FC<POSProps> = ({ user }) => {
         setSaleModes(prev => {
           const next = { ...prev };
           mergedProducts.forEach(p => {
-            if (!next[p.id]) next[p.id] = 'caja';
+            if (!next[p.id]) next[p.id] = 'unidad';
           });
           return next;
         });
@@ -124,13 +124,14 @@ const POS: React.FC<POSProps> = ({ user }) => {
   };
 
   const addToCart = (product: Producto) => {
-    const mode = product.tipo === 'pastillas' ? (saleModes[product.id] || 'caja') : 'caja';
     const unitsPerBox = product.unidades_por_caja || 1;
+    // LÓGICA CLAVE: Si unidades_por_caja es 1, forzamos SIEMPRE modo 'unidad', ignorando el estado.
+    const mode = unitsPerBox === 1 ? 'unidad' : (saleModes[product.id] || 'unidad');
     
     const currentReserved = getReservedUnits(product.id);
-    const quantityToDeduct = mode === 'caja' ? unitsPerBox : 1;
+    const quantityInUnitsToDeduct = mode === 'caja' ? unitsPerBox : 1;
     
-    if ((currentReserved + quantityToDeduct) > product.stock) {
+    if ((currentReserved + quantityInUnitsToDeduct) > product.stock) {
         alert(`Stock insuficiente. Disponibles: ${product.stock - currentReserved} unidades.`);
         return;
     }
@@ -175,15 +176,15 @@ const POS: React.FC<POSProps> = ({ user }) => {
 
         if (delta > 0) {
              const product = currentItem.product;
-             const unitsNeeded = (mode === 'caja' ? currentItem.unitsPerBox : 1);
-             const otherReserved = prev
+             const unitsNeededPerItem = (mode === 'caja' ? currentItem.unitsPerBox : 1);
+             const otherReservedInUnits = prev
                 .filter((i, idx) => idx !== itemIndex && i.product.id === productId)
                 .reduce((acc, i) => acc + (i.cantidad * (i.saleMode === 'caja' ? i.unitsPerBox : 1)), 0);
              
-             const totalAfterUpdate = otherReserved + (newQty * unitsNeeded);
+             const totalAfterUpdateInUnits = otherReservedInUnits + (newQty * unitsNeededPerItem);
 
-             if (totalAfterUpdate > product.stock) {
-                 alert("Stock máximo alcanzado para este producto.");
+             if (totalAfterUpdateInUnits > product.stock) {
+                 alert("Stock máximo alcanzado.");
                  return prev;
              }
         }
@@ -204,11 +205,9 @@ const POS: React.FC<POSProps> = ({ user }) => {
   const handleCheckout = async () => {
     if (cart.length === 0 || processing) return;
     
-    // VALIDACIÓN DE USUARIO PARA EVITAR ERROR DE LLAVE FORÁNEA
     const userId = Number(user?.id);
     if (!userId) {
-      alert("Sesión inválida. Por favor, vuelve a iniciar sesión.");
-      window.location.reload();
+      alert("Sesión inválida.");
       return;
     }
 
@@ -221,7 +220,7 @@ const POS: React.FC<POSProps> = ({ user }) => {
     try {
       const transactionId = crypto.randomUUID();
       const salesToInsert = cart.map(item => ({
-        usuario_id: userId, // Usar el ID casteado
+        usuario_id: userId,
         producto_id: item.product.id,
         cantidad: item.cantidad,
         total: item.finalPrice * item.cantidad,
@@ -235,10 +234,19 @@ const POS: React.FC<POSProps> = ({ user }) => {
       const { error: saleError } = await supabase.from('ventas').insert(salesToInsert);
       if (saleError) throw saleError;
 
+      // Actualizar Stock
       for (const item of cart) {
-        const qtyToDeduct = item.cantidad * (item.saleMode === 'caja' ? item.unitsPerBox : 1);
-        await supabase.rpc('deduct_stock', { p_id: item.product.id, p_qty: qtyToDeduct });
+        const qtyToDeductInUnits = item.cantidad * (item.saleMode === 'caja' ? item.unitsPerBox : 1);
+        await supabase.rpc('deduct_stock', { p_id: item.product.id, p_qty: qtyToDeductInUnits });
       }
+
+      // AUDITORIA
+      await supabase.from('audit_logs').insert({
+          usuario_id: userId,
+          accion: 'VENTA',
+          modulo: 'POS',
+          detalles: `Ticket #${transactionId.split('-')[0].toUpperCase()} - Total: $${totalAmount.toLocaleString()} - ${cart.length} items`
+      });
 
       setShowOrderSummary({ 
         transactionId: transactionId.split('-')[0].toUpperCase(), 
@@ -254,7 +262,7 @@ const POS: React.FC<POSProps> = ({ user }) => {
       fetchProducts();
     } catch (err: any) {
       console.error("Error en venta:", err);
-      alert("Error al procesar la venta. Inténtalo de nuevo.");
+      alert("Error al procesar la venta.");
     } finally {
       setProcessing(false);
     }
@@ -262,20 +270,19 @@ const POS: React.FC<POSProps> = ({ user }) => {
 
   const filteredProducts = products.filter(p => 
     p.nombre.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    p.codigo_barras.includes(searchTerm) ||
+    (p.codigo_barras && p.codigo_barras.includes(searchTerm)) ||
     p.laboratorio?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
     <div className="relative lg:h-[calc(100vh-140px)] h-auto animate-slide-up">
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-full">
-        {/* PANEL IZQUIERDO: BÚSQUEDA Y PRODUCTOS */}
         <div className="lg:col-span-7 flex flex-col space-y-4 lg:h-full min-h-[500px]">
           <div className="relative group shrink-0">
             <input
               ref={searchInputRef}
               className="w-full pl-14 pr-20 py-5 bg-white border-2 border-slate-100 rounded-[2rem] outline-none font-bold text-lg shadow-sm focus:border-emerald-500 transition-all placeholder:text-slate-300"
-              placeholder="Buscar por nombre, lab o código..."
+              placeholder="Buscar medicamento..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -288,12 +295,13 @@ const POS: React.FC<POSProps> = ({ user }) => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:overflow-y-auto custom-scrollbar flex-1 pb-20 pr-1">
             {filteredProducts.map(product => {
-              const mode = saleModes[product.id] || 'caja';
               const unitsPerBox = product.unidades_por_caja || 1;
-              const reserved = getReservedUnits(product.id);
-              const effectiveStock = Math.max(0, product.stock - reserved);
-              const boxesAvailable = Math.floor(effectiveStock / unitsPerBox);
-              const unitsAvailable = effectiveStock % unitsPerBox;
+              const mode = unitsPerBox === 1 ? 'unidad' : (saleModes[product.id] || 'unidad');
+              
+              const reservedInUnits = getReservedUnits(product.id);
+              const effectiveStockInUnits = Math.max(0, product.stock - reservedInUnits);
+              const boxesAvailable = Math.floor(effectiveStockInUnits / unitsPerBox);
+              
               const basePrice = mode === 'unidad' ? (Number(product.precio_unidad) || 0) : (Number(product.precio) || 0);
               const discountPercent = getDiscountPercentage(product);
               const finalPrice = basePrice * (1 - discountPercent / 100);
@@ -307,43 +315,53 @@ const POS: React.FC<POSProps> = ({ user }) => {
                   )}
                   <div>
                     <h4 className="font-black text-slate-900 text-xs uppercase leading-tight pr-2 mb-1 truncate">{product.nombre}</h4>
-                    <p className="text-[9px] text-slate-400 font-medium mb-2 line-clamp-2 leading-relaxed lowercase first-letter:uppercase">{product.descripcion || 'Sin descripción detallada'}</p>
-                    <div className="flex flex-wrap items-center gap-2 mb-3">
+                    <div className="flex flex-wrap items-center gap-2 mb-2">
                        <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded-lg text-[8px] font-black uppercase border border-indigo-100">{product.laboratorio || 'S/L'}</span>
                        <span className="text-[8px] font-black text-slate-600 uppercase tracking-tight px-2 py-0.5 bg-slate-50 border border-slate-100 rounded-lg">📍 {product.ubicacion || '---'}</span>
                     </div>
-                    <div className={`flex items-center gap-2 mb-3 p-2 rounded-xl border ${effectiveStock <= (unitsPerBox * 2) ? 'bg-rose-50 border-rose-100' : 'bg-slate-50 border-slate-100'}`}>
-                       <span className={`w-2 h-2 rounded-full ${effectiveStock < (unitsPerBox * 2) ? 'bg-rose-500 animate-pulse' : 'bg-emerald-500'}`}></span>
+
+                    {product.descripcion && (
+                      <p className="text-[10px] text-slate-500 font-medium italic mb-3 line-clamp-2 leading-tight bg-slate-50/50 p-2 rounded-xl">
+                        {product.descripcion}
+                      </p>
+                    )}
+                    
+                    <div className={`flex items-center gap-2 mb-3 p-3 rounded-2xl border ${effectiveStockInUnits <= 0 ? 'bg-rose-50 border-rose-100' : 'bg-slate-50 border-slate-100'}`}>
                        <div className="flex flex-col w-full">
-                          <p className="text-[9px] font-black text-slate-600 uppercase tracking-tight">Disp: {effectiveStock} Unid</p>
-                          {product.tipo === 'pastillas' ? (
-                             <p className="text-[10px] font-black text-slate-800 uppercase tracking-tight mt-0.5">{boxesAvailable} Cajas / {unitsAvailable} Unid</p>
-                          ) : (
-                             <div className="h-1 bg-slate-200 rounded-full mt-1 overflow-hidden w-full"><div className="h-full bg-emerald-500" style={{ width: `${Math.min(100, (effectiveStock / 50) * 100)}%` }}></div></div>
-                          )}
+                          <p className="text-[10px] font-black text-slate-900 uppercase tracking-tight">
+                            {mode === 'unidad' 
+                              ? `Disponible: ${effectiveStockInUnits} Unidades` 
+                              : `Disponible: ${boxesAvailable} Cajas (${effectiveStockInUnits} Unid total)`
+                            }
+                          </p>
                        </div>
                     </div>
                   </div>
                   <div>
                     <div className="flex items-center justify-between mb-3 bg-slate-50 p-3 rounded-xl border border-slate-100/50">
                       <div className="flex flex-col">
-                        {discountPercent > 0 ? (
-                          <>
-                            <p className="text-[10px] text-slate-400 line-through font-bold decoration-slate-300 mb-0.5">${basePrice.toLocaleString()}</p>
-                            <p className="font-black text-emerald-600 text-lg tracking-tighter leading-none">${finalPrice.toLocaleString()}</p>
-                          </>
-                        ) : (
-                          <p className="font-black text-slate-900 text-lg tracking-tighter leading-none">${basePrice.toLocaleString()}</p>
-                        )}
+                        <span className="text-[8px] font-black text-slate-400 uppercase mb-0.5">PVP {mode === 'caja' ? 'Caja' : 'Unidad'}</span>
+                        <p className="font-black text-slate-900 text-lg tracking-tighter leading-none">${finalPrice.toLocaleString()}</p>
                       </div>
-                      {product.tipo === 'pastillas' && (
+                      
+                      {unitsPerBox > 1 ? (
                         <div className="flex bg-white rounded-lg p-1 border border-slate-200 shadow-inner h-fit">
-                          <button onClick={() => setSaleModes({...saleModes, [product.id]: 'caja'})} className={`px-2 py-1 rounded-md text-[8px] font-black uppercase ${mode === 'caja' ? 'bg-slate-900 text-white' : 'text-slate-400'}`}>Caja</button>
-                          <button onClick={() => setSaleModes({...saleModes, [product.id]: 'unidad'})} className={`px-2 py-1 rounded-md text-[8px] font-black uppercase ${mode === 'unidad' ? 'bg-slate-900 text-white' : 'text-slate-400'}`}>Unid</button>
+                          <button onClick={() => setSaleModes({...saleModes, [product.id]: 'unidad'})} className={`px-2 py-1 rounded-md text-[8px] font-black uppercase transition-all ${mode === 'unidad' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400'}`}>Unid</button>
+                          <button onClick={() => setSaleModes({...saleModes, [product.id]: 'caja'})} className={`px-2 py-1 rounded-md text-[8px] font-black uppercase transition-all ${mode === 'caja' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-400'}`}>Caja</button>
                         </div>
+                      ) : (
+                         <div className="px-3 py-1 bg-slate-100 text-slate-400 rounded-lg border border-slate-200 text-[8px] font-black uppercase tracking-wider">
+                           Venta Individual
+                         </div>
                       )}
                     </div>
-                    <button onClick={() => addToCart(product)} disabled={effectiveStock <= 0} className="w-full py-3 bg-slate-950 text-white rounded-xl text-[9px] font-black uppercase hover:bg-emerald-600 active:scale-95 transition-all shadow-lg disabled:opacity-50">{effectiveStock > 0 ? '+ Agregar' : 'Agotado'}</button>
+                    <button 
+                      onClick={() => addToCart(product)} 
+                      disabled={effectiveStockInUnits <= 0 || (mode === 'caja' && effectiveStockInUnits < unitsPerBox)} 
+                      className="w-full py-3 bg-slate-950 text-white rounded-xl text-[9px] font-black uppercase hover:bg-emerald-600 active:scale-95 transition-all shadow-lg disabled:opacity-50"
+                    >
+                      {effectiveStockInUnits <= 0 ? 'Agotado' : (mode === 'caja' && effectiveStockInUnits < unitsPerBox) ? 'Cajas Insuficientes' : '+ Agregar'}
+                    </button>
                   </div>
                 </div>
               );
@@ -351,12 +369,11 @@ const POS: React.FC<POSProps> = ({ user }) => {
           </div>
         </div>
 
-        {/* PANEL DERECHO: CARRITO Y PAGO */}
         <div className="lg:col-span-5 flex flex-col bg-white lg:rounded-[2.5rem] shadow-xl border border-slate-100 overflow-hidden h-full rounded-t-[2.5rem] mt-4 lg:mt-0">
           <div className="p-5 bg-slate-900 text-white shrink-0 flex flex-col gap-4">
             <div className="flex justify-between items-start">
               <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total a Pagar</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total Venta</span>
                 <p className="text-4xl font-black text-white tracking-tighter leading-none mt-1">${totalAmount.toLocaleString()}</p>
               </div>
               <div className="flex flex-col items-end gap-2">
@@ -369,21 +386,26 @@ const POS: React.FC<POSProps> = ({ user }) => {
             {cart.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center opacity-20 py-10">
                  <svg className="w-12 h-12 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
-                 <p className="font-black uppercase text-[9px] tracking-widest">Carrito Vacío</p>
+                 <p className="font-black uppercase text-[9px] tracking-widest text-center">Selecciona productos para iniciar la venta</p>
               </div>
             ) : cart.map((item, idx) => (
-              <div key={idx} className="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between animate-in slide-in-from-right-4">
+              <div key={idx} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between animate-in slide-in-from-right-4">
                 <div className="flex-1 min-w-0 pr-3">
                   <h5 className="font-black text-slate-900 text-[11px] uppercase truncate leading-none mb-1">{item.product.nombre}</h5>
-                  <p className="text-[10px] text-indigo-600 font-black uppercase tracking-tight">{item.saleMode} • ${item.finalPrice.toLocaleString()}</p>
+                  <div className="flex items-center gap-2">
+                    <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${item.saleMode === 'caja' ? 'bg-slate-100 text-slate-900' : 'bg-indigo-50 text-indigo-600'}`}>
+                      {item.saleMode}
+                    </span>
+                    <p className="text-[10px] text-slate-400 font-bold tracking-tight">${item.finalPrice.toLocaleString()} {item.saleMode === 'unidad' ? 'unid' : 'caja'}</p>
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
                    <div className="flex items-center bg-slate-100 rounded-lg p-0.5 px-1 border border-slate-200">
-                       <button onClick={() => updateQuantity(item.product.id, item.saleMode, -1)} className="w-5 h-5 flex items-center justify-center text-slate-500 font-black"> - </button>
-                       <span className="w-5 text-center font-black text-slate-900 text-xs">{item.cantidad}</span>
-                       <button onClick={() => updateQuantity(item.product.id, item.saleMode, 1)} className="w-5 h-5 flex items-center justify-center text-slate-500 font-black"> + </button>
+                       <button onClick={() => updateQuantity(item.product.id, item.saleMode, -1)} className="w-6 h-6 flex items-center justify-center text-slate-500 font-black"> - </button>
+                       <span className="w-8 text-center font-black text-slate-900 text-xs">{item.cantidad}</span>
+                       <button onClick={() => updateQuantity(item.product.id, item.saleMode, 1)} className="w-6 h-6 flex items-center justify-center text-slate-500 font-black"> + </button>
                    </div>
-                   <button onClick={() => removeFromCart(item.product.id, item.saleMode)} className="w-6 h-6 flex items-center justify-center text-rose-400 bg-rose-50 rounded-lg"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12"/></svg></button>
+                   <button onClick={() => removeFromCart(item.product.id, item.saleMode)} className="w-8 h-8 flex items-center justify-center text-rose-400 bg-rose-50 rounded-lg"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12"/></svg></button>
                 </div>
               </div>
             ))}
@@ -397,14 +419,14 @@ const POS: React.FC<POSProps> = ({ user }) => {
                <div className="animate-in slide-in-from-bottom-2 fade-in">
                   <div className="relative mb-2">
                     <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-black text-sm">$</span>
-                    <input type="number" className="w-full pl-8 pr-4 py-3 rounded-xl border-2 border-slate-100 font-black text-xl outline-none focus:border-emerald-500 bg-slate-50" placeholder="RECIBIDO" value={cashReceived} onChange={e => setCashReceived(e.target.value)} />
+                    <input type="number" className="w-full pl-8 pr-4 py-3 rounded-xl border-2 border-slate-100 font-black text-xl outline-none focus:border-emerald-500 bg-slate-50" placeholder="PAGA CON" value={cashReceived} onChange={e => setCashReceived(e.target.value)} />
                   </div>
                   {Number(cashReceived) >= totalAmount && (
                     <div className="flex justify-between items-center px-3 py-2 bg-emerald-50 rounded-lg border border-emerald-100"><span className="text-[10px] font-black text-emerald-600 uppercase">Cambio:</span><span className="text-xl font-black text-emerald-600">${changeDue.toLocaleString()}</span></div>
                   )}
                </div>
              )}
-             <button disabled={cart.length === 0 || processing || (paymentMethod === 'efectivo' && (Number(cashReceived) < totalAmount || cashReceived === ''))} onClick={handleCheckout} className="w-full py-4 rounded-xl font-black text-xs uppercase tracking-widest bg-slate-900 text-white hover:bg-emerald-600 shadow-xl disabled:opacity-50">{processing ? 'Procesando...' : 'COBRAR'}</button>
+             <button disabled={cart.length === 0 || processing || (paymentMethod === 'efectivo' && (Number(cashReceived) < totalAmount || cashReceived === ''))} onClick={handleCheckout} className="w-full py-4 rounded-xl font-black text-xs uppercase tracking-widest bg-slate-900 text-white hover:bg-emerald-600 shadow-xl disabled:opacity-50">{processing ? 'Procesando...' : 'FINALIZAR VENTA'}</button>
           </div>
         </div>
       </div>
@@ -438,7 +460,7 @@ const POS: React.FC<POSProps> = ({ user }) => {
             </div>
             <div className="shrink-0 space-y-6">
               <div className="flex justify-between items-end px-2"><div><span className="text-[10px] font-black text-slate-400 uppercase">Total Cobrado</span><p className="text-5xl font-black text-slate-900 tracking-tighter leading-none mt-1">${showOrderSummary.total.toLocaleString()}</p></div>{showOrderSummary.paymentMethod === 'efectivo' && (<div><span className="text-[10px] font-black text-emerald-600 uppercase">Cambio</span><p className="text-3xl font-black text-emerald-600 tracking-tighter">${showOrderSummary.change.toLocaleString()}</p></div>)}</div>
-              <button onClick={() => setShowOrderSummary(null)} className="w-full py-5 bg-slate-950 text-white rounded-[2rem] font-black text-[10px] uppercase shadow-2xl hover:bg-emerald-600 transition-all active:scale-95">Nueva Venta</button>
+              <button onClick={() => setShowOrderSummary(null)} className="w-full py-5 bg-slate-950 text-white rounded-[2rem] font-black text-[11px] uppercase shadow-2xl hover:bg-emerald-600 transition-all active:scale-95">Nueva Venta</button>
             </div>
           </div>
         </div>

@@ -1,11 +1,14 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { Producto, Usuario } from '../types';
 
-interface InventoryProps { user: Usuario; }
+interface InventoryProps { 
+  user: Usuario; 
+  setView?: (view: any) => void; 
+}
 
-const Inventory: React.FC<InventoryProps> = ({ user }) => {
+const Inventory: React.FC<InventoryProps> = ({ user, setView }) => {
   const [products, setProducts] = useState<Producto[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -13,120 +16,74 @@ const Inventory: React.FC<InventoryProps> = ({ user }) => {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   
-  // Estados para el Escáner
-  const [isScanning, setIsScanning] = useState(false);
-  const [scanTarget, setScanTarget] = useState<'search' | 'form'>('search');
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const scanIntervalRef = useRef<number | null>(null);
+  const [managementMode, setManagementMode] = useState<'simple' | 'box'>('box');
 
   const [formData, setFormData] = useState({
     id: undefined as number | undefined,
+    codigo_barras: '',
     tipo: 'producto' as 'producto' | 'pastillas',
     nombre: '',
-    codigo_barras: '',
     laboratorio: '',
     precio: '', 
-    precio_unidad: '',
+    precio_unitario: '', 
     unidades_por_caja: '1', 
     descripcion: '',
-    ubicacion: '',
-    fecha_vencimiento: ''
+    ubicacion: ''
   });
 
-  const isAdmin = user.role_id === 1;
+  const isAdmin = user.role_id === 1 || user.role_id === 3;
 
   useEffect(() => { 
     fetchProducts(); 
-    return () => stopScanner();
   }, []);
 
   const fetchProducts = async () => {
     setLoading(true);
-    setSaveError(null);
     try {
       const { data, error } = await supabase
         .from('productos')
         .select('*')
         .order('nombre', { ascending: true });
-      
       if (error) throw error;
       if (data) setProducts(data);
     } catch (err: any) {
-      console.error("Error al cargar productos:", err);
-      if (err.message && (err.message.includes('fetch') || err.message.includes('network'))) {
-         setSaveError("⚠️ Sin conexión a internet. Revisa tu red.");
-      } else {
-         setSaveError("Error cargando inventario. Intenta recargar.");
-      }
+      console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
-  const startScanner = async (target: 'search' | 'form') => {
-    setScanTarget(target);
-    setIsScanning(true);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: 'environment' } 
-      });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play();
-        
-        if ('BarcodeDetector' in window) {
-          const barcodeDetector = new (window as any).BarcodeDetector({
-            formats: ['ean_13', 'ean_8', 'code_128', 'qr_code']
-          });
-
-          scanIntervalRef.current = window.setInterval(async () => {
-            if (videoRef.current && videoRef.current.readyState === 4) {
-              const barcodes = await barcodeDetector.detect(videoRef.current);
-              if (barcodes.length > 0) {
-                const code = barcodes[0].rawValue;
-                if (target === 'search') setSearchTerm(code);
-                else setFormData(prev => ({ ...prev, codigo_barras: code }));
-                stopScanner();
-              }
-            }
-          }, 500);
-        }
-      }
-    } catch (err) {
-      alert("Permiso de cámara denegado.");
-      setIsScanning(false);
-    }
-  };
-
-  const stopScanner = () => {
-    if (scanIntervalRef.current) clearInterval(scanIntervalRef.current);
-    if (videoRef.current?.srcObject) {
-      (videoRef.current.srcObject as MediaStream).getTracks().forEach(t => t.stop());
-    }
-    setIsScanning(false);
-  };
-
   const handleOpenModal = (p?: Producto) => {
     setSaveError(null);
     if (p) {
+      // Si las unidades por caja son 1, asumimos que es modalidad simple
+      const isSimple = (p.unidades_por_caja || 1) <= 1;
+      setManagementMode(isSimple ? 'simple' : 'box');
       setFormData({
         id: p.id,
+        codigo_barras: p.codigo_barras || '',
         tipo: p.tipo || 'producto',
         nombre: p.nombre,
-        codigo_barras: p.codigo_barras,
         laboratorio: p.laboratorio || '',
         precio: String(p.precio || ''),
-        precio_unidad: String(p.precio_unidad || ''),
+        precio_unitario: String(p.precio_unidad || ''),
         unidades_por_caja: String(p.unidades_por_caja || 1),
         descripcion: p.descripcion || '',
-        ubicacion: p.ubicacion || '',
-        fecha_vencimiento: p.fecha_vencimiento ? p.fecha_vencimiento.split('T')[0] : ''
+        ubicacion: p.ubicacion || ''
       });
     } else {
+      setManagementMode('box');
       setFormData({ 
-        id: undefined, tipo: 'producto', nombre: '', codigo_barras: '', 
-        laboratorio: '', precio: '', precio_unidad: '', unidades_por_caja: '1',
-        descripcion: '', ubicacion: '', fecha_vencimiento: '' 
+        id: undefined,
+        codigo_barras: '',
+        tipo: 'producto',
+        nombre: '',
+        laboratorio: '',
+        precio: '',
+        precio_unitario: '',
+        unidades_por_caja: '1',
+        descripcion: '',
+        ubicacion: ''
       });
     }
     setShowModal(true);
@@ -135,159 +92,164 @@ const Inventory: React.FC<InventoryProps> = ({ user }) => {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSaving) return;
-
-    const { nombre, codigo_barras, laboratorio, precio, ubicacion, descripcion, fecha_vencimiento, tipo, precio_unidad, unidades_por_caja } = formData;
-    
-    if (!nombre.trim() || !codigo_barras.trim() || !laboratorio.trim() || !precio || !ubicacion.trim() || !descripcion.trim() || !fecha_vencimiento) {
-      setSaveError("⚠️ Faltan campos obligatorios.");
-      return;
-    }
-
-    if (tipo === 'pastillas' && (!precio_unidad || Number(unidades_por_caja) < 1)) {
-      setSaveError("⚠️ Faltan datos de caja/unidades.");
-      return;
-    }
-
-    setSaveError(null);
     setIsSaving(true);
-
     try {
-      const productData = {
+      const isSimple = managementMode === 'simple';
+      
+      const payload: any = {
         tipo: formData.tipo,
-        nombre: formData.nombre.trim(),
-        codigo_barras: formData.codigo_barras.trim(),
+        codigo_barras: formData.codigo_barras.trim() || 'S/C',
+        nombre: formData.nombre.trim().toUpperCase(),
         laboratorio: formData.laboratorio.trim().toUpperCase(),
         descripcion: formData.descripcion.trim(),
         ubicacion: formData.ubicacion.trim().toUpperCase(),
-        fecha_vencimiento: formData.fecha_vencimiento,
-        precio: parseFloat(formData.precio),
-        precio_unidad: formData.tipo === 'pastillas' ? parseFloat(formData.precio_unidad) : 0,
-        unidades_por_caja: parseFloat(formData.unidades_por_caja) || 1
+        precio: isSimple ? 0 : (parseFloat(formData.precio) || 0), 
+        precio_unidad: parseFloat(formData.precio_unitario) || 0,
+        unidades_por_caja: isSimple ? 1 : (parseInt(formData.unidades_por_caja) || 1)
       };
 
       if (formData.id) {
-        const { error } = await supabase.from('productos').update(productData).eq('id', formData.id);
+        const { error } = await supabase.from('productos').update(payload).eq('id', formData.id);
         if (error) throw error;
-      } else {
-        const { error } = await supabase.from('productos').insert([{ ...productData, stock: 0 }]);
-        if (error) throw error;
-      }
+        
+        // AUDITORIA
+        await supabase.from('audit_logs').insert({
+            usuario_id: user.id,
+            accion: 'EDICION_PRODUCTO',
+            modulo: 'INVENTARIO',
+            detalles: `Actualizó: ${payload.nombre}. PVP U: $${payload.precio_unidad}`
+        });
 
+      } else {
+        const { error } = await supabase.from('productos').insert([{ ...payload, stock: 0 }]);
+        if (error) throw error;
+
+        // AUDITORIA
+        await supabase.from('audit_logs').insert({
+            usuario_id: user.id,
+            accion: 'CREACION_PRODUCTO',
+            modulo: 'INVENTARIO',
+            detalles: `Creó: ${payload.nombre}. Lab: ${payload.laboratorio}`
+        });
+      }
+      
       setShowModal(false);
       fetchProducts();
     } catch (err: any) {
-      console.error("Save Error:", err);
-      if (err.message && err.message.includes('unidades_por_caja')) {
-        setSaveError("🚨 ERROR: Actualiza la base de datos.");
-      } else if (err.message && (err.message.includes('fetch') || err.message.includes('network'))) {
-        setSaveError("⚠️ Error de conexión.");
-      } else {
-        setSaveError("Error: " + (err.message || "No se pudo guardar"));
-      }
+      setSaveError(err.message || "Error al guardar producto.");
     } finally {
       setIsSaving(false);
     }
   };
 
-  const filteredProducts = products.filter(p => 
+  const filtered = products.filter(p => 
     p.nombre.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    p.codigo_barras.includes(searchTerm) ||
-    p.laboratorio?.toLowerCase().includes(searchTerm.toLowerCase())
+    (p.codigo_barras && p.codigo_barras.includes(searchTerm)) ||
+    (p.laboratorio && p.laboratorio.toLowerCase().includes(searchTerm.toLowerCase()))
   );
+  
+  // Estadísticas rápidas
+  const totalRefs = products.length;
+  const totalStock = products.reduce((acc, p) => acc + (p.stock || 0), 0);
+  const lowStock = products.filter(p => (p.stock || 0) < 10).length;
 
   return (
     <div className="space-y-6 animate-slide-up pb-10">
       
-      {/* Barra de Búsqueda y Acción */}
+      {/* Sección de Estadísticas Superiores */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-slate-900 text-white p-6 rounded-[2.5rem] shadow-xl flex items-center justify-between relative overflow-hidden group">
+             <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/20 rounded-full -mr-10 -mt-10 group-hover:scale-150 transition-transform"></div>
+             <div className="relative z-10">
+                <p className="text-[10px] font-black uppercase tracking-widest text-indigo-300 mb-1">Productos Registrados</p>
+                <p className="text-4xl font-black">{totalRefs}</p>
+             </div>
+             <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center text-2xl backdrop-blur-sm">💊</div>
+        </div>
+        
+        <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100 flex items-center justify-between group hover:border-emerald-200 transition-all">
+             <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Unidades en Stock</p>
+                <p className="text-3xl font-black text-emerald-600">{totalStock}</p>
+             </div>
+             <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center text-xl group-hover:scale-110 transition-transform">📦</div>
+        </div>
+
+         <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100 flex items-center justify-between group hover:border-amber-200 transition-all">
+             <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Stock Bajo / Crítico</p>
+                <p className="text-3xl font-black text-amber-500">{lowStock}</p>
+             </div>
+             <div className="w-12 h-12 bg-amber-50 text-amber-500 rounded-2xl flex items-center justify-center text-xl group-hover:scale-110 transition-transform">⚠️</div>
+        </div>
+      </div>
+
       <div className="flex flex-col lg:flex-row justify-between items-center gap-4 bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100">
         <div className="relative flex-1 w-full">
-          <input
-            type="text"
-            className="w-full pl-14 pr-12 py-4 bg-slate-50 border-2 border-transparent rounded-2xl outline-none font-bold text-sm focus:bg-white focus:border-indigo-600 shadow-inner"
-            placeholder="Buscar por nombre, lab o escanea..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-          <button onClick={() => startScanner('search')} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-          </button>
+          <input type="text" className="w-full pl-14 pr-6 py-4 bg-slate-50 border-2 border-transparent rounded-2xl outline-none font-bold text-sm focus:bg-white focus:border-indigo-600" placeholder="Buscar medicamento, lab o código..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+          <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg></div>
         </div>
         {isAdmin && (
-          <button onClick={() => handleOpenModal()} className="w-full lg:w-auto bg-slate-950 text-white px-10 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-xl hover:bg-emerald-600 transition-all">
-            + Registro Completo
+          <button onClick={() => handleOpenModal()} className="w-full lg:w-auto bg-slate-950 text-white px-10 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl hover:bg-emerald-600 transition-all">
+            + Nuevo Producto
           </button>
         )}
       </div>
 
-      {/* Tabla de Productos */}
       <div className="bg-white rounded-[3rem] shadow-sm border border-slate-100 overflow-hidden">
-        {saveError && !showModal && (
-           <div className="p-4 bg-rose-50 text-rose-600 text-center font-black text-xs uppercase cursor-pointer hover:bg-rose-100" onClick={fetchProducts}>
-             {saveError} - Click para reintentar
-           </div>
-        )}
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
-              <tr className="bg-slate-950 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                <th className="px-6 py-6 pl-10">Medicamento</th>
-                <th className="px-6 py-6">Descripción</th>
-                <th className="px-6 py-6 text-center">Ubicación</th>
-                <th className="px-4 py-6 text-center text-emerald-400">Cajas Completas</th>
-                <th className="px-4 py-6 text-center text-indigo-400">Stock Total (Unidades)</th>
-                <th className="px-6 py-6 text-right">Precio Caja</th>
-                <th className="px-10 py-6 text-center">Acción</th>
+              <tr className="bg-slate-900 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                <th className="px-8 py-6 text-left">Medicamento</th>
+                <th className="px-8 py-6 text-left">Información</th>
+                <th className="px-8 py-6 text-center">Stock (Cajas + Unid)</th>
+                <th className="px-8 py-6 text-center">PVP Caja</th>
+                <th className="px-8 py-6 text-center">PVP Unidad</th>
+                <th className="px-10 py-6 text-center">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {loading ? (
-                <tr><td colSpan={7} className="py-20 text-center font-black uppercase text-slate-300">Cargando inventario...</td></tr>
-              ) : filteredProducts.length === 0 ? (
-                <tr><td colSpan={7} className="py-20 text-center font-black uppercase text-slate-300">No se encontraron productos</td></tr>
-              ) : filteredProducts.map(p => {
-                const safeStock = Math.max(0, p.stock);
-                const unitsPerBox = Math.max(1, p.unidades_por_caja || 1);
+              {filtered.map(p => {
+                const unitsPerBox = p.unidades_por_caja || 1;
+                const boxes = Math.floor(p.stock / unitsPerBox);
+                const leftovers = p.stock % unitsPerBox;
                 
-                // Cálculo de Cajas
-                const boxes = Math.floor(safeStock / unitsPerBox);
-
                 return (
                   <tr key={p.id} className="hover:bg-slate-50/50 transition-all group">
-                    <td className="px-6 py-6 pl-10">
-                      <div className="font-black text-slate-900 uppercase text-xs mb-0.5">{p.nombre}</div>
-                      <div className="text-[9px] text-slate-400 font-bold uppercase">Lab: {p.laboratorio}</div>
+                    <td className="px-8 py-6">
+                      <p className="font-black text-slate-900 text-xs uppercase">{p.nombre}</p>
+                      <p className="text-[8px] text-slate-300 font-bold mt-1 bg-slate-100 px-2 py-0.5 rounded w-fit">{p.codigo_barras || 'Sin Código'}</p>
                     </td>
-                    <td className="px-6 py-6">
-                      <div className="text-[9px] text-slate-500 bg-slate-100 px-3 py-1.5 rounded-xl inline-block max-w-[200px] lg:max-w-[300px] truncate italic border border-slate-200">
-                        {p.descripcion || 'Sin descripción'}
+                    <td className="px-8 py-6">
+                      <p className="text-[9px] text-indigo-500 font-black uppercase tracking-wider mb-1">{p.laboratorio || 'GENÉRICO'}</p>
+                      {p.descripcion ? (
+                         <p className="text-[9px] text-slate-500 font-medium italic line-clamp-2 max-w-[180px] leading-tight mb-1">{p.descripcion}</p>
+                      ) : (
+                         <span className="text-[8px] text-slate-300 italic block mb-1">Sin notas</span>
+                      )}
+                      <p className="text-[8px] text-slate-400 font-bold uppercase flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 bg-slate-300 rounded-full"></span>
+                        {p.ubicacion || 'General'}
+                      </p>
+                    </td>
+                    <td className="px-8 py-6 text-center">
+                      <div className={`inline-flex flex-col items-center px-4 py-2 rounded-xl border ${p.stock < unitsPerBox ? 'bg-rose-50 border-rose-100 text-rose-600' : 'bg-emerald-50 border-emerald-100 text-emerald-600'}`}>
+                        <span className="text-sm font-black whitespace-nowrap">
+                          {unitsPerBox > 1 ? `${boxes} Caja(s) + ${leftovers} Unid` : `${p.stock} Unid`}
+                        </span>
+                        <span className="text-[8px] font-black uppercase opacity-60">Total: {p.stock} Unid</span>
                       </div>
                     </td>
-                    <td className="px-6 py-6 text-center">
-                      <span className="px-3 py-1 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-lg text-[9px] font-black uppercase whitespace-nowrap">
-                        📍 {p.ubicacion}
-                      </span>
+                    <td className="px-8 py-6 text-center font-black text-slate-900 text-sm">
+                      {p.precio > 0 ? `$${p.precio.toLocaleString()}` : '---'}
                     </td>
-                    
-                    {/* COLUMNA CAJAS (CALCULADO) */}
-                    <td className="px-4 py-6 text-center">
-                      <div className={`inline-flex items-center justify-center px-4 py-2 rounded-xl border ${boxes === 0 ? 'bg-slate-50 text-slate-300 border-slate-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'}`}>
-                         <span className="text-sm font-black mr-1">{boxes}</span>
-                         <span className="text-[9px] font-bold uppercase opacity-70">{p.tipo === 'pastillas' ? 'Cajas' : 'Empaques'}</span>
-                      </div>
+                    <td className="px-8 py-6 text-center font-black text-indigo-600 text-sm">
+                      ${(p.precio_unidad || 0).toLocaleString()}
                     </td>
-
-                    {/* COLUMNA STOCK TOTAL REAL */}
-                    <td className="px-4 py-6 text-center">
-                       <div className={`inline-flex items-center justify-center px-4 py-2 rounded-xl border ${safeStock === 0 ? 'bg-rose-50 text-rose-500 border-rose-100' : 'bg-indigo-50 text-indigo-600 border-indigo-100'}`}>
-                         <span className="text-sm font-black mr-1">{safeStock}</span>
-                         <span className="text-[9px] font-bold uppercase opacity-70">Unid.</span>
-                       </div>
-                    </td>
-
-                    <td className="px-6 py-6 text-right font-black text-slate-900 text-sm whitespace-nowrap">${p.precio.toLocaleString()}</td>
                     <td className="px-10 py-6 text-center">
-                      <button onClick={() => handleOpenModal(p)} className="p-3 bg-slate-100 text-slate-400 rounded-xl hover:bg-slate-950 hover:text-white transition-all">
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                      <button onClick={() => handleOpenModal(p)} className="p-3 bg-slate-100 text-slate-400 hover:text-indigo-600 rounded-xl hover:bg-white border border-transparent hover:border-slate-100 transition-all">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
                       </button>
                     </td>
                   </tr>
@@ -295,112 +257,112 @@ const Inventory: React.FC<InventoryProps> = ({ user }) => {
               })}
             </tbody>
           </table>
+          {filtered.length === 0 && !loading && (
+             <div className="py-20 text-center text-slate-300 font-black uppercase text-[10px] tracking-[0.3em]">No hay productos registrados</div>
+          )}
         </div>
       </div>
 
-      {/* Modal de Edición/Creación */}
       {showModal && (
-        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[100] p-4 animate-in fade-in">
-          <div className="bg-white rounded-[3.5rem] w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[150] p-4 animate-in fade-in">
+          <div className="bg-white rounded-[4rem] w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[95vh]">
             <div className="p-10 bg-slate-950 text-white flex justify-between items-center shrink-0">
-              <h3 className="text-xl font-black uppercase tracking-tight">{formData.id ? 'Editar' : 'Nuevo'} Registro</h3>
-              <button onClick={() => setShowModal(false)} className="text-white/50 hover:text-rose-500">
+              <div>
+                <h3 className="text-xl font-black uppercase tracking-tight leading-none">
+                  {formData.id ? 'Ficha de Medicamento' : 'Nuevo Medicamento'}
+                </h3>
+                <p className="text-[9px] text-emerald-400 font-black uppercase tracking-[0.2em] mt-2">Configuración de Precios y Presentación</p>
+              </div>
+              <button onClick={() => setShowModal(false)} className="text-white/40 hover:text-white transition-colors">
                 <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6"/></svg>
               </button>
             </div>
             
             <form onSubmit={handleSave} className="p-10 space-y-8 overflow-y-auto custom-scrollbar bg-slate-50/20">
-              {saveError && (
-                <div className="p-5 bg-rose-50 border border-rose-100 text-rose-600 rounded-2xl text-[10px] font-black uppercase text-center animate-bounce">
-                  {saveError}
-                </div>
-              )}
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="md:col-span-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">Nombre del Medicamento *</label>
-                  <input type="text" className="w-full px-6 py-4 bg-white border-2 border-slate-100 rounded-2xl font-black text-sm uppercase focus:border-indigo-600 outline-none" value={formData.nombre} onChange={e => setFormData({...formData,nombre: e.target.value})} placeholder="NOMBRE Y PRESENTACIÓN" />
-                </div>
-
-                <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">Laboratorio *</label>
-                  <input type="text" className="w-full px-6 py-4 bg-white border-2 border-slate-100 rounded-2xl font-black text-xs uppercase focus:border-indigo-600 outline-none" value={formData.laboratorio} onChange={e => setFormData({...formData, laboratorio: e.target.value})} placeholder="EJ: MK, GENFAR, ETC" />
-                </div>
-
-                <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">Código EAN *</label>
-                  <div className="flex gap-2">
-                    <input type="text" className="w-full px-6 py-4 bg-white border-2 border-slate-100 rounded-2xl font-bold text-xs focus:border-indigo-600 outline-none" value={formData.codigo_barras} onChange={e => setFormData({...formData, codigo_barras: e.target.value})} placeholder="LEER CÓDIGO" />
-                    <button type="button" onClick={() => startScanner('form')} className="w-14 h-14 bg-slate-950 text-white rounded-2xl flex items-center justify-center shrink-0">
-                       <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                    </button>
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  
+                  <div className="md:col-span-2 space-y-3">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Modalidad de Venta</label>
+                    <div className="flex bg-white p-2 rounded-3xl border border-slate-100 shadow-sm relative overflow-hidden">
+                       <button 
+                        type="button" 
+                        disabled={!!formData.id}
+                        onClick={() => setManagementMode('simple')}
+                        className={`flex-1 py-4 rounded-[1.5rem] font-black text-[10px] uppercase tracking-widest transition-all ${managementMode === 'simple' ? 'bg-indigo-600 text-white shadow-xl' : 'text-slate-400 hover:bg-slate-50'} ${formData.id ? 'opacity-50 cursor-not-allowed' : ''}`}
+                       >
+                         Solo Individual
+                       </button>
+                       <button 
+                        type="button" 
+                        disabled={!!formData.id}
+                        onClick={() => setManagementMode('box')}
+                        className={`flex-1 py-4 rounded-[1.5rem] font-black text-[10px] uppercase tracking-widest transition-all ${managementMode === 'box' ? 'bg-slate-900 text-white shadow-xl' : 'text-slate-400 hover:bg-slate-50'} ${formData.id ? 'opacity-50 cursor-not-allowed' : ''}`}
+                       >
+                         Caja + Individual
+                       </button>
+                    </div>
+                    {formData.id && (
+                      <p className="text-[8px] text-amber-500 font-black uppercase tracking-widest ml-2 bg-amber-50 p-2 rounded-lg border border-amber-100 flex items-center gap-2">
+                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                         La modalidad de venta no puede cambiarse tras el registro inicial.
+                      </p>
+                    )}
                   </div>
-                </div>
 
-                <div className="md:col-span-2 p-6 bg-white rounded-3xl border border-slate-100 shadow-sm space-y-6">
-                  <div className="flex gap-2">
-                    <button type="button" onClick={() => setFormData({...formData, tipo: 'producto', unidades_por_caja: '1'})} className={`flex-1 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${formData.tipo === 'producto' ? 'bg-slate-950 text-white' : 'bg-slate-50 text-slate-400'}`}>Empaque General</button>
-                    <button type="button" onClick={() => setFormData({...formData, tipo: 'pastillas'})} className={`flex-1 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${formData.tipo === 'pastillas' ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-400'}`}>Por Pastillas</button>
+                  <div className="md:col-span-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2 ml-1">Código de Barras *</label>
+                    <input type="text" required className="w-full px-7 py-4 bg-white border-2 border-slate-100 rounded-2xl font-bold text-sm focus:border-indigo-600 outline-none transition-all shadow-sm" value={formData.codigo_barras} onChange={e => setFormData({...formData, codigo_barras: e.target.value})} placeholder="Escanee o asigne un código único" />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2 ml-1">Nombre Comercial *</label>
+                    <input type="text" required className="w-full px-7 py-5 bg-white border-2 border-slate-100 rounded-[2rem] font-black text-sm uppercase focus:border-indigo-600 outline-none transition-all shadow-sm" value={formData.nombre} onChange={e => setFormData({...formData, nombre: e.target.value})} placeholder="EJ: ACETAMINOFEN 500MG" />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2 ml-1">Descripción / Notas</label>
+                    <textarea className="w-full px-7 py-4 bg-white border-2 border-slate-100 rounded-[2rem] font-bold text-xs uppercase focus:border-indigo-600 outline-none transition-all shadow-sm min-h-[80px] resize-none" value={formData.descripcion} onChange={e => setFormData({...formData, descripcion: e.target.value})} placeholder="Ej: Contraindicaciones, dosis recomendada..." />
                   </div>
                   
-                  <div className={`grid ${formData.tipo === 'pastillas' ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1'} gap-4`}>
-                    <div className="space-y-2">
-                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Precio Caja/Pack *</label>
-                      <input type="number" className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-black text-lg focus:bg-white outline-none" value={formData.precio} onChange={e => setFormData({...formData, precio: e.target.value})} placeholder="0.00" />
-                    </div>
-                    {formData.tipo === 'pastillas' && (
+                  <div className={`p-8 bg-white rounded-[3rem] border border-slate-100 md:col-span-2 grid grid-cols-1 ${managementMode === 'box' ? 'md:grid-cols-3' : 'md:grid-cols-1'} gap-8 transition-all shadow-inner`}>
+                    {managementMode === 'box' && (
                       <>
-                        <div className="space-y-2">
-                          <label className="text-[9px] font-black text-indigo-400 uppercase tracking-widest block">Unidades en Caja</label>
-                          <input type="number" className="w-full px-6 py-4 bg-indigo-50/30 rounded-2xl font-black text-lg focus:bg-white outline-none" value={formData.unidades_por_caja} onChange={e => setFormData({...formData, unidades_por_caja: e.target.value})} placeholder="EJ: 10" />
+                        <div className="animate-in slide-in-from-left-2">
+                          <label className="text-[9px] font-black text-slate-400 uppercase block mb-1 tracking-widest">Unid. x Caja *</label>
+                          <input type="number" min="2" required className="w-full px-6 py-5 bg-slate-50 rounded-2xl font-black text-2xl outline-none focus:bg-white border-2 border-transparent focus:border-indigo-100" value={formData.unidades_por_caja} onChange={e => setFormData({...formData, unidades_por_caja: e.target.value})} />
                         </div>
-                        <div className="space-y-2">
-                          <label className="text-[9px] font-black text-indigo-400 uppercase tracking-widest block">Precio Unidad</label>
-                          <input type="number" className="w-full px-6 py-4 bg-indigo-50/30 rounded-2xl font-black text-lg focus:bg-white outline-none" value={formData.precio_unidad} onChange={e => setFormData({...formData, precio_unidad: e.target.value})} placeholder="0.00" />
+                        <div className="animate-in slide-in-from-bottom-2">
+                          <label className="text-[9px] font-black text-slate-400 uppercase block mb-1 tracking-widest">PVP Caja ($) *</label>
+                          <input type="number" step="0.01" required className="w-full px-6 py-5 bg-slate-50 rounded-2xl font-black text-2xl outline-none focus:bg-white border-2 border-transparent focus:border-indigo-100" value={formData.precio} onChange={e => setFormData({...formData, precio: e.target.value})} placeholder="0.00" />
                         </div>
                       </>
                     )}
+                    <div className="animate-in zoom-in-95">
+                      <label className="text-[9px] font-black text-indigo-500 uppercase block mb-1 tracking-widest">PVP Unidad ($) *</label>
+                      <input type="number" step="0.01" required className="w-full px-6 py-5 bg-indigo-50/20 rounded-2xl font-black text-2xl text-indigo-600 outline-none focus:border-white border-2 border-indigo-100 focus:border-indigo-300" value={formData.precio_unitario} onChange={e => setFormData({...formData, precio_unitario: e.target.value})} placeholder="0.00" />
+                    </div>
                   </div>
-                </div>
 
-                <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">Ubicación Pasillo *</label>
-                  <input type="text" className="w-full px-6 py-4 bg-white border-2 border-slate-100 rounded-2xl font-black text-xs uppercase focus:border-indigo-600 outline-none" value={formData.ubicacion} onChange={e => setFormData({...formData, ubicacion: e.target.value})} placeholder="EJ: ESTANTE B-4" />
-                </div>
-                <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">Vencimiento *</label>
-                  <input type="date" className="w-full px-6 py-4 bg-white border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-indigo-600" value={formData.fecha_vencimiento} onChange={e => setFormData({...formData, fecha_vencimiento: e.target.value})} />
-                </div>
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase block mb-1 tracking-widest ml-1">Laboratorio</label>
+                    <input type="text" className="w-full px-6 py-4 bg-white border-2 border-slate-100 rounded-2xl font-black text-xs uppercase shadow-sm outline-none focus:border-indigo-600" value={formData.laboratorio} onChange={e => setFormData({...formData, laboratorio: e.target.value})} placeholder="MK, GENFAR..." />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase block mb-1 tracking-widest ml-1">Ubicación</label>
+                    <input type="text" className="w-full px-6 py-4 bg-white border-2 border-slate-100 rounded-2xl font-black text-xs uppercase shadow-sm outline-none focus:border-indigo-600" value={formData.ubicacion} onChange={e => setFormData({...formData, ubicacion: e.target.value})} placeholder="ESTANTE A-1" />
+                  </div>
+               </div>
 
-                <div className="md:col-span-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">Descripción Detallada *</label>
-                  <textarea rows={3} required className="w-full px-6 py-4 bg-white border-2 border-slate-100 rounded-3xl font-bold text-xs uppercase focus:border-indigo-600 outline-none shadow-sm" value={formData.descripcion} onChange={e => setFormData({...formData, descripcion: e.target.value})} placeholder="Escribe las indicaciones, componentes o notas obligatorias..." />
-                </div>
-              </div>
+               {saveError && <p className="text-rose-500 text-[10px] font-black uppercase text-center bg-rose-50 py-4 rounded-2xl border border-rose-100 animate-bounce">{saveError}</p>}
 
-              <div className="flex gap-4 pt-6 shrink-0">
-                <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-5 bg-slate-100 text-slate-500 rounded-3xl font-black text-[10px] uppercase tracking-widest">Cancelar</button>
-                <button type="submit" disabled={isSaving} className="flex-[2] py-5 bg-slate-950 text-white rounded-3xl font-black text-[10px] uppercase tracking-[0.4em] shadow-xl hover:bg-emerald-600 disabled:opacity-50">
-                  {isSaving ? 'Guardando...' : 'Guardar Producto'}
-                </button>
-              </div>
+               <div className="flex gap-4 pt-6 shrink-0">
+                 <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-5 bg-slate-100 text-slate-400 rounded-[2.5rem] font-black text-[10px] uppercase tracking-widest hover:bg-rose-50 hover:text-rose-500 transition-all">Cancelar</button>
+                 <button type="submit" disabled={isSaving} className="flex-[2] py-5 bg-slate-900 text-white rounded-[2.5rem] font-black text-[10px] uppercase tracking-[0.4em] shadow-2xl hover:bg-emerald-600 transition-all active:scale-95 disabled:opacity-50">
+                   {isSaving ? 'Guardando...' : 'Confirmar Registro'}
+                 </button>
+               </div>
             </form>
           </div>
-        </div>
-      )}
-
-      {isScanning && (
-        <div className="fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center p-6 animate-in fade-in">
-          <div className="w-full max-w-lg aspect-square relative rounded-[4rem] overflow-hidden border-4 border-indigo-500/30">
-             <video ref={videoRef} className="w-full h-full object-cover" />
-             <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-64 h-64 border-2 border-indigo-500 rounded-[3rem] relative shadow-[0_0_0_1000px_rgba(0,0,0,0.6)]">
-                   <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-1 bg-indigo-500 animate-scan shadow-[0_0_15px_#6366f1]"></div>
-                </div>
-             </div>
-          </div>
-          <button onClick={stopScanner} className="mt-10 bg-rose-600 text-white px-12 py-5 rounded-full font-black text-xs uppercase tracking-widest">Cerrar Cámara</button>
-          <style>{`@keyframes scan { 0% { top: 0; } 100% { top: 100%; } } .animate-scan { position: absolute; animation: scan 2s infinite ease-in-out; }`}</style>
         </div>
       )}
     </div>

@@ -19,7 +19,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     setError('');
 
     try {
-      // Usamos maybeSingle para evitar errores si no hay match, y atrapamos errores de red
+      // 1. Validar Credenciales
       const { data, error: queryError } = await supabase
         .from('usuarios')
         .select('*, roles(nombre)')
@@ -28,22 +28,35 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         .eq('activo', true)
         .maybeSingle();
 
-      if (queryError) {
-        // Detectar si es un error de red (fetch failed)
-        if (queryError.message && (queryError.message.includes('fetch') || queryError.message.includes('network'))) {
-           throw new Error('Error de Conexión: No se pudo contactar con la base de datos. Verifica tu internet.');
+      if (queryError) throw queryError;
+      if (!data) throw new Error('Credenciales incorrectas o usuario inactivo.');
+
+      const usuarioLogueado = data as Usuario;
+
+      // 2. Registrar Auditoría (Login)
+      // Usamos un bloque try-catch interno para que el login no falle si falla el log, 
+      // pero lo mostramos en consola.
+      try {
+        const { error: auditError } = await supabase.from('audit_logs').insert({
+          usuario_id: usuarioLogueado.id,
+          accion: 'LOGIN',
+          modulo: 'SISTEMA',
+          detalles: `Acceso web: ${new Date().toLocaleTimeString()}`
+        });
+        
+        if (auditError) {
+          console.error("❌ ERROR AL GUARDAR LOG LOGIN:", auditError);
+        } else {
+          console.log("✅ Log LOGIN guardado correctamente");
         }
-        throw queryError;
+      } catch (logErr) {
+        console.error("❌ EXCEPCION AL GUARDAR LOG:", logErr);
       }
 
-      if (!data) {
-         throw new Error('Credenciales incorrectas o usuario inactivo.');
-      }
-
-      onLogin(data as Usuario);
+      onLogin(usuarioLogueado);
     } catch (err: any) {
       console.error("Login Error:", err);
-      setError(err.message || "Error desconocido al iniciar sesión");
+      setError(err.message || "Error al iniciar sesión");
     } finally {
       setLoading(false);
     }
@@ -104,10 +117,6 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           </button>
         </form>
       </div>
-      
-      <p className="mt-8 text-[10px] text-slate-400 font-bold uppercase tracking-widest text-center">
-        ¿Problemas de conexión? <br/> Verifica tu internet o contacta soporte.
-      </p>
     </div>
   );
 };
