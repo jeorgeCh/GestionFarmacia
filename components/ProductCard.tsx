@@ -56,7 +56,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, isAdmin }) =
         </div>
 
         <h3 className="font-black text-slate-900 text-sm uppercase mt-3 truncate pr-8">{nombre}</h3>
-        <p className="text-[9px] text-slate-400 font-medium mt-1 h-8 line-clamp-2">{descripcion || 'Sin descripción detallada.'}</p>
+        <p className="text-[9px] text-slate-400 font-medium mt-1 h-12 line-clamp-3">{descripcion || 'Sin descripción detallada.'}</p>
       </div>
 
       <div className="mt-6 space-y-4">
