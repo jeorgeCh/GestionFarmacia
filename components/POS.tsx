@@ -125,7 +125,6 @@ interface CartItem {
 
 const POS: React.FC<POSProps> = ({ user }) => {
   const [allProducts, setAllProducts] = useState<Producto[]>([]);
-  const [topProducts, setTopProducts] = useState<Producto[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [cashReceived, setCashReceived] = useState<number | string>('');
@@ -147,32 +146,21 @@ const POS: React.FC<POSProps> = ({ user }) => {
 
   const fetchData = async () => {
     try {
-      const [productsRes, discountsRes, ventasRes] = await Promise.all([
+      const [productsRes, discountsRes] = await Promise.all([
           supabase.from('productos').select('*').gt('stock', 0),
-          supabase.from('descuentos').select('*').eq('activo', true),
-          supabase.from('ventas').select('producto_id, cantidad')
+          supabase.from('descuentos').select('*').eq('activo', true)
       ]);
 
       const productsData = productsRes.data || [];
       const discountsData = discountsRes.data || [];
-      const ventasData = ventasRes.data || [];
-
-      const salesCounts = ventasData.reduce((acc, venta) => {
-        acc[venta.producto_id] = (acc[venta.producto_id] || 0) + venta.cantidad;
-        return acc;
-      }, {} as Record<number, number>);
 
       const productsWithDetails = productsData.map(p => ({
         ...p,
         unidades_por_caja: p.unidades_por_caja || 1, 
         descuentos: discountsData?.filter(d => d.producto_id === p.id) || [],
-        totalSold: salesCounts[p.id] || 0
       }));
 
-      const sortedBySales = [...productsWithDetails].sort((a, b) => b.totalSold - a.totalSold);
-      
       setAllProducts(productsWithDetails);
-      setTopProducts(sortedBySales.slice(0, 6));
 
       setSaleModes(prev => {
         const next = { ...prev };
@@ -381,7 +369,7 @@ const POS: React.FC<POSProps> = ({ user }) => {
 
   const productsToDisplay = useMemo(() => {
     if (!searchTerm) {
-        return topProducts;
+        return [];
     }
     const filtered = allProducts.filter(p => 
       p.nombre.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -389,7 +377,7 @@ const POS: React.FC<POSProps> = ({ user }) => {
       (p.laboratorio && p.laboratorio.toLowerCase().includes(searchTerm.toLowerCase()))
     );
     return filtered.slice(0, 6);
-  }, [searchTerm, allProducts, topProducts]);
+  }, [searchTerm, allProducts]);
 
   return (
     <div className="relative lg:h-[calc(100vh-140px)] h-auto animate-slide-up">
@@ -422,9 +410,17 @@ const POS: React.FC<POSProps> = ({ user }) => {
               />
             ))}
             {productsToDisplay.length === 0 && (
-              <div className="col-span-full py-20 text-center opacity-50">
-                 <p className="font-black text-slate-400 uppercase text-xs tracking-widest">{searchTerm ? 'No se encontraron productos' : 'Cargando productos más vendidos...'}</p>
-              </div>
+                <div className="col-span-full h-full flex items-center justify-center opacity-30 text-center">
+                    {searchTerm ? (
+                        <p className="font-black text-slate-400 uppercase text-xs tracking-widest">No se encontraron productos.</p>
+                    ) : (
+                        <div>
+                            <svg className="w-20 h-20 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                            <p className="font-black text-slate-400 uppercase text-sm tracking-widest">Busca un producto para empezar</p>
+                            <p className="text-slate-400 text-xs mt-1 font-bold">Usa el nombre, laboratorio o código de barras.</p>
+                        </div>
+                    )}
+                </div>
             )}
           </div>
         </div>
