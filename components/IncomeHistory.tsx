@@ -3,7 +3,11 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { Ingreso } from '../types';
 
-const IncomeHistory: React.FC = () => {
+interface IncomeHistoryProps {
+  canEdit: boolean;
+}
+
+const IncomeHistory: React.FC<IncomeHistoryProps> = ({ canEdit }) => {
   const [history, setHistory] = useState<Ingreso[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -44,6 +48,18 @@ const IncomeHistory: React.FC = () => {
       console.error("Error fetching history", e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    if (window.confirm('¿Está seguro de que desea eliminar este registro? Esta acción es irreversible.')) {
+      try {
+        const { error } = await supabase.from('ingresos').delete().eq('id', id);
+        if (error) throw error;
+        fetchHistory();
+      } catch (error: any) {
+        alert('Error al eliminar el registro: ' + error.message);
+      }
     }
   };
 
@@ -96,11 +112,12 @@ const IncomeHistory: React.FC = () => {
                  <th className="px-8 py-5">Producto</th>
                  <th className="px-8 py-5 text-center">Cantidad</th>
                  <th className="px-8 py-5 text-right">Costo Total</th>
+                 {canEdit && <th className="px-8 py-5 text-center">Acciones</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {loading ? (
-                <tr><td colSpan={5} className="py-10 text-center text-slate-300 font-black uppercase text-[10px] tracking-widest">Buscando...</td></tr>
+                <tr><td colSpan={canEdit ? 6 : 5} className="py-10 text-center text-slate-300 font-black uppercase text-[10px] tracking-widest">Buscando...</td></tr>
               ) : history.length > 0 ? (
                 history.map(h => (
                   <tr key={h.id} className="hover:bg-violet-50/30 transition-colors">
@@ -121,10 +138,17 @@ const IncomeHistory: React.FC = () => {
                     <td className="px-8 py-5 text-right font-black text-violet-600 text-sm">
                        ${h.total.toLocaleString()}
                     </td>
+                    {canEdit && (
+                      <td className="px-8 py-5 text-center">
+                        <button onClick={() => handleDelete(h.id)} className="p-2 bg-rose-50 text-rose-500 rounded-lg hover:bg-rose-100 transition-colors">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))
               ) : (
-                <tr><td colSpan={5} className="py-10 text-center text-slate-300 font-black uppercase text-[10px] tracking-widest">{isSearching ? 'No se encontraron registros para esta búsqueda' : 'No hay ingresos recientes'}</td></tr>
+                <tr><td colSpan={canEdit ? 6 : 5} className="py-10 text-center text-slate-300 font-black uppercase text-[10px] tracking-widest">{isSearching ? 'No se encontraron registros para esta búsqueda' : 'No hay ingresos recientes'}</td></tr>
               )}
             </tbody>
          </table>

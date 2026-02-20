@@ -33,7 +33,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, saleMode, onAddToCar
   const finalPrice = basePrice * (1 - discountPercent / 100);
 
   return (
-    <div className={`bg-white p-4 rounded-[1.5rem] border-2 transition-all group flex flex-col justify-between relative overflow-hidden shadow-sm ${discountPercent > 0 ? 'border-emerald-400/70' : 'border-slate-100 hover:border-indigo-400'}`}>
+    <div className={`bg-white p-4 rounded-[1.5rem] border-2 transition-all group flex flex-col justify-between relative overflow-hidden shadow-sm ${discountPercent > 0 ? 'border-emerald-400/70' : 'border-slate-100 hover:border-indigo-400'} min-h-[280px]`}>
       <div className="mb-4">
         <div className="flex justify-between items-center mb-2">
             <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest truncate max-w-[90px]">{product.laboratorio || 'Generico'}</span>

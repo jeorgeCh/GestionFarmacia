@@ -14,7 +14,11 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<Producto | null>(null);
   
-  const isSuperUser = Number(user.role_id) === 3;
+  const userRole = Number(user.role_id);
+  const isAdmin = userRole === 1;
+  const isSuperUser = userRole === 3;
+
+  const canEdit = isAdmin || isSuperUser;
 
   const [formData, setFormData] = useState({
     proveedor_id: '',
@@ -239,7 +243,7 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
         </div>
       </div>
 
-      {isSuperUser && <IncomeHistory />}
+      {canEdit && <IncomeHistory canEdit={canEdit} />}
 
       {success && (
         <div className="fixed bottom-10 right-10 z-[100] bg-emerald-600 text-white px-10 py-6 rounded-[2.5rem] font-black uppercase shadow-2xl animate-in slide-in-from-right-10 flex items-center gap-4">
