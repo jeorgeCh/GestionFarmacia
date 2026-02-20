@@ -33,7 +33,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, saleMode, onAddToCar
   const finalPrice = basePrice * (1 - discountPercent / 100);
 
   return (
-    <div className={`bg-white p-4 rounded-[1.5rem] border-2 transition-all group flex flex-col justify-between relative overflow-hidden shadow-sm ${discountPercent > 0 ? 'border-emerald-400/70' : 'border-slate-100 hover:border-indigo-400'} min-h-[280px]`}>
+    <div className={`bg-white p-4 rounded-[1.5rem] border-2 transition-all group flex flex-col justify-between relative overflow-hidden shadow-sm ${discountPercent > 0 ? 'border-emerald-400/70' : 'border-slate-100 hover:border-indigo-400'} min-h-[320px]`}>
       <div className="mb-4">
         <div className="flex justify-between items-center mb-2">
             <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest truncate max-w-[90px]">{product.laboratorio || 'Generico'}</span>
@@ -44,8 +44,9 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, saleMode, onAddToCar
                   </span>
             )}
         </div>
-        <h4 className="font-black text-slate-800 text-sm uppercase leading-tight h-10 flex items-center" title={product.nombre}>{product.nombre}</h4>
-        <div className="flex items-center gap-1.5 text-slate-400 mt-2">
+        <h4 className="font-black text-slate-800 text-sm uppercase leading-tight line-clamp-2 h-10" title={product.nombre}>{product.nombre}</h4>
+        <p className="text-[10px] text-slate-500 font-medium mt-1 line-clamp-2 h-8">{product.descripcion || ''}</p>
+        <div className="flex items-center gap-1.5 text-slate-400 mt-1">
             <svg className="w-3.5 h-3.5 flex-shrink-0 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
             <span className="text-[10px] font-bold uppercase tracking-wider">{product.ubicacion || 'Sin Ubicar'}</span>
         </div>
@@ -441,7 +442,7 @@ const POS: React.FC<POSProps> = ({ user }) => {
           <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/50 custom-scrollbar">
             {cart.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center opacity-20 py-10">
-                 <svg className="w-12 h-12 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
+                 <svg className="w-12 h-12 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
                  <p className="font-black uppercase text-[9px] tracking-widest text-center">Selecciona productos para iniciar la venta</p>
               </div>
             ) : cart.map((item, idx) => (
@@ -461,7 +462,7 @@ const POS: React.FC<POSProps> = ({ user }) => {
                        <span className="w-8 text-center font-black text-slate-900 text-xs">{item.cantidad}</span>
                        <button onClick={() => updateQuantity(item.product.id, item.saleMode, 1)} className="w-6 h-6 flex items-center justify-center text-slate-500 font-black"> + </button>
                    </div>
-                   <button onClick={() => removeFromCart(item.product.id, item.saleMode)} className="w-8 h-8 flex items-center justify-center text-rose-400 bg-rose-50 rounded-lg"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12"/></svg></button>
+                   <button onClick={() => removeFromCart(item.product.id, item.saleMode)} className="w-8 h-8 flex items-center justify-center text-rose-400 bg-rose-50 rounded-lg"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" /></svg></button>
                 </div>
               </div>
             ))}

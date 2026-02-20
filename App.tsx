@@ -5,7 +5,7 @@ import { supabase } from './supabaseClient';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import Sidebar from './components/Sidebar';
-import MobileNav from './components/MobileNav'; // Importado
+import MobileNav from './components/MobileNav';
 import Inventory from './components/Inventory';
 import POS from './components/POS';
 import Income from './components/Income';
@@ -70,8 +70,10 @@ const App: React.FC = () => {
 
   if (!user) return <Login onLogin={handleLogin} />;
 
-  const isSuperUser = Number(user.role_id) === 3;
-  const isAdmin = Number(user.role_id) === 1 || isSuperUser;
+  const userRole = Number(user.role_id);
+  const isSuperUser = userRole === 3;
+  const isAdmin = userRole === 1 || isSuperUser;
+  const isSeller = userRole === 2;
 
   const renderView = () => {
     const deniedAccess = <div className="p-12 text-center text-rose-500 font-black uppercase tracking-widest text-xs">Acceso Denegado</div>;
@@ -79,8 +81,8 @@ const App: React.FC = () => {
     switch (view) {
       case 'dashboard': return <Dashboard user={user} setView={setView} />;
       case 'pos': return <POS user={user} />;
-      case 'inventory': return isAdmin ? <Inventory user={user} setView={setView} /> : deniedAccess;
-      case 'income': return isAdmin ? <Income user={user} /> : deniedAccess;
+      case 'inventory': return isAdmin || isSeller ? <Inventory user={user} setView={setView} /> : deniedAccess;
+      case 'income': return isAdmin || isSeller ? <Income user={user} /> : deniedAccess;
       case 'analytics': return isAdmin ? <Analytics /> : deniedAccess;
       case 'providers': return isAdmin ? <Providers /> : deniedAccess;
       case 'discounts': return isAdmin ? <Discounts /> : deniedAccess;
