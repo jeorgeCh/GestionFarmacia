@@ -56,7 +56,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, isAdmin }) =
         </div>
 
         <h3 className="font-black text-slate-900 text-sm uppercase mt-3 truncate pr-8">{nombre}</h3>
-        <p className="text-[9px] text-slate-400 font-medium mt-1 h-12 line-clamp-3">{descripcion || 'Sin descripción detallada.'}</p>
+        <p className="text-[9px] text-slate-400 font-medium mt-1 h-8 line-clamp-2">{descripcion || 'Sin descripción detallada.'}</p>
       </div>
 
       <div className="mt-6 space-y-4">
@@ -75,14 +75,14 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, isAdmin }) =
             </div>
         </div>
 
-        <div className="flex items-center justify-between bg-slate-50/80 p-4 rounded-2xl">
+        <div className="flex items-center justify-between bg-slate-50/80 p-4 rounded-2xl min-h-[76px]">
           <div>
             <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">PVP Unidad</p>
             <p className="font-black text-indigo-600 text-base">
               ${(precio_unidad || 0).toLocaleString('es-CO')}
             </p>
           </div>
-          {!isSimple && precio > 0 && (
+          {(!isSimple && precio > 0) && (
             <div className="text-right">
               <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">PVP Caja</p>
               <p className="font-bold text-slate-600 text-sm">
