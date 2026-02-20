@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
-import { Producto, Proveedor, Usuario, Ingreso } from '../types';
+import { Producto, Proveedor, Usuario } from '../types';
+import IncomeHistory from './IncomeHistory';
 
 interface IncomeProps {
   user: Usuario;
@@ -13,16 +14,14 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<Producto | null>(null);
   
-  // Estado para el historial (Solo Super Usuario)
-  const [history, setHistory] = useState<Ingreso[]>([]);
   const isSuperUser = Number(user.role_id) === 3;
 
   const [formData, setFormData] = useState({
     proveedor_id: '',
-    codigo_barras: '',      // Código de barras se pide en la carga
-    cantidad_cajas: 1,      // Número de Cajas
-    unidades_por_caja: 1,   // Unidades dentro de cada caja
-    costo_por_caja: 0,      // Valor de la caja
+    codigo_barras: '',
+    cantidad_cajas: 1, 
+    unidades_por_caja: 1,
+    costo_por_caja: 0,
     lote: '',
     fecha_vencimiento: ''
   });
@@ -32,10 +31,7 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
 
   useEffect(() => {
     fetchData();
-    if (isSuperUser) {
-      fetchHistory();
-    }
-  }, [isSuperUser]);
+  }, []);
 
   const fetchData = async () => {
     try {
@@ -48,22 +44,6 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
     } catch (e) {}
   };
 
-  const fetchHistory = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('ingresos')
-        .select('*, productos(nombre, laboratorio), proveedores(nombre), usuarios(username)')
-        .order('fecha', { ascending: false })
-        .limit(20);
-      
-      if (error) throw error;
-      if (data) setHistory(data);
-    } catch (e) {
-      console.error("Error fetching history", e);
-    }
-  };
-
-  // Al seleccionar un producto, precargamos sus datos actuales
   useEffect(() => {
     if (selectedProduct) {
       setFormData(prev => ({
@@ -74,7 +54,6 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
     }
   }, [selectedProduct]);
 
-  // Cálculos dinámicos
   const totalUnidadesEntrantes = formData.cantidad_cajas * formData.unidades_por_caja;
   const costoTotalFactura = formData.cantidad_cajas * formData.costo_por_caja;
   const costoUnitarioCompra = formData.unidades_por_caja > 0 
@@ -87,8 +66,7 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
 
     setLoading(true);
     try {
-      // 1. Registrar Ingreso en la tabla histórica
-      const { error: incErr } = await supabase.from('ingresos').insert({
+      await supabase.from('ingresos').insert({
         usuario_id: user.id,
         producto_id: selectedProduct.id,
         proveedor_id: Number(formData.proveedor_id),
@@ -99,24 +77,16 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
         fecha_vencimiento: formData.fecha_vencimiento || null
       });
 
-      if (incErr) throw incErr;
-
-      // 2. Actualizar datos del producto (Código de barras, presentación y vencimiento)
-      const { error: updErr } = await supabase.from('productos').update({
+      await supabase.from('productos').update({
         codigo_barras: formData.codigo_barras.trim(),
         fecha_vencimiento: formData.fecha_vencimiento || selectedProduct.fecha_vencimiento,
-        unidades_por_caja: formData.unidades_por_caja 
       }).eq('id', selectedProduct.id);
 
-      if (updErr) throw updErr;
-
-      // 3. Sumar stock físico mediante RPC (negativo en p_qty suma stock)
       await supabase.rpc('deduct_stock', { 
         p_id: selectedProduct.id, 
         p_qty: -totalUnidadesEntrantes 
       });
 
-      // 4. AUDITORIA
       await supabase.from('audit_logs').insert({
           usuario_id: user.id,
           accion: 'INGRESO_MERCANCIA',
@@ -137,7 +107,6 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
         fecha_vencimiento: '' 
       });
       fetchData();
-      if (isSuperUser) fetchHistory();
       setTimeout(() => setSuccess(false), 3000);
     } catch (err: any) {
       alert("Error al procesar la carga: " + err.message);
@@ -146,7 +115,10 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
     }
   };
 
-  const filtered = products.filter(p => p.nombre.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filtered = products.filter(p => 
+    p.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (p.codigo_barras && p.codigo_barras.includes(searchTerm))
+  );
 
   return (
     <div className="max-w-5xl mx-auto space-y-8 animate-slide-up pb-20">
@@ -267,58 +239,7 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
         </div>
       </div>
 
-      {isSuperUser && (
-        <div className="bg-white rounded-[3.5rem] shadow-sm border border-slate-100 overflow-hidden animate-in slide-in-from-bottom-10">
-          <div className="p-10 bg-violet-50/50 border-b border-violet-100 flex justify-between items-center">
-            <div>
-              <h3 className="text-xl font-black text-violet-900 uppercase tracking-tight">Historial de Compras</h3>
-              <p className="text-[10px] text-violet-400 font-bold uppercase tracking-widest mt-1">Información Confidencial (Costos) — Últimos 20 registros</p>
-            </div>
-            <div className="w-10 h-10 bg-white rounded-xl shadow-sm border border-violet-100 flex items-center justify-center text-violet-600 font-black">
-              $$
-            </div>
-          </div>
-          <div className="overflow-x-auto">
-             <table className="w-full text-left">
-                <thead>
-                  <tr className="bg-white text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-50">
-                     <th className="px-8 py-5">Fecha / Op</th>
-                     <th className="px-8 py-5">Proveedor</th>
-                     <th className="px-8 py-5">Producto</th>
-                     <th className="px-8 py-5 text-center">Cantidad</th>
-                     <th className="px-8 py-5 text-right">Costo Total</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50">
-                  {history.map(h => (
-                    <tr key={h.id} className="hover:bg-violet-50/30 transition-colors">
-                      <td className="px-8 py-5">
-                         <p className="font-black text-slate-900 text-xs">{new Date(h.fecha).toLocaleDateString()}</p>
-                         <p className="text-[9px] text-slate-400 font-bold uppercase">{h.usuarios?.username || 'Sist'}</p>
-                      </td>
-                      <td className="px-8 py-5">
-                        <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded-lg text-[9px] font-black uppercase">{h.proveedores?.nombre}</span>
-                      </td>
-                      <td className="px-8 py-5">
-                         <p className="font-black text-slate-900 text-xs uppercase">{h.productos?.nombre}</p>
-                         <p className="text-[9px] text-slate-400 font-bold uppercase">Lote: {h.lote}</p>
-                      </td>
-                      <td className="px-8 py-5 text-center font-black text-slate-600 text-sm">
-                         {h.cantidad} Uds
-                      </td>
-                      <td className="px-8 py-5 text-right font-black text-violet-600 text-sm">
-                         ${h.total.toLocaleString()}
-                      </td>
-                    </tr>
-                  ))}
-                  {history.length === 0 && (
-                    <tr><td colSpan={5} className="py-10 text-center text-slate-300 font-black uppercase text-[10px] tracking-widest">No hay historial disponible</td></tr>
-                  )}
-                </tbody>
-             </table>
-          </div>
-        </div>
-      )}
+      {isSuperUser && <IncomeHistory />}
 
       {success && (
         <div className="fixed bottom-10 right-10 z-[100] bg-emerald-600 text-white px-10 py-6 rounded-[2.5rem] font-black uppercase shadow-2xl animate-in slide-in-from-right-10 flex items-center gap-4">

@@ -1,26 +1,31 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
 
 const SalesTimeline: React.FC = () => {
   const [transactions, setTransactions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedTransaction, setSelectedTransaction] = useState<any | null>(null);
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     fetchTimeline();
-  }, []);
+  }, [selectedDate]);
 
   const fetchTimeline = async () => {
     setLoading(true);
     try {
-      const now = new Date();
-      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).toISOString();
-      const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).toISOString();
+        const date = new Date(selectedDate);
+        const timezoneOffset = date.getTimezoneOffset() * 60000;
+        const localDate = new Date(date.getTime() + timezoneOffset);
+
+        const startOfDay = new Date(localDate.getFullYear(), localDate.getMonth(), localDate.getDate(), 0, 0, 0, 0).toISOString();
+        const endOfDay = new Date(localDate.getFullYear(), localDate.getMonth(), localDate.getDate(), 23, 59, 59, 999).toISOString();
       
       const { data, error } = await supabase
         .from('ventas')
-        .select('*, productos(nombre, laboratorio), usuarios(username)')
+        .select('*, productos(nombre, laboratorio), usuarios(username)') 
         .gte('fecha', startOfDay)
         .lte('fecha', endOfDay)
         .order('fecha', { ascending: false });
@@ -38,7 +43,7 @@ const SalesTimeline: React.FC = () => {
             transaccion_id: tId,
             fecha: current.fecha,
             metodo_pago: current.metodo_pago,
-            usuario: current.usuarios?.username,
+            vendedor: current.usuarios?.username,
             total_venta: Number(current.total),
             items: [current]
           });
@@ -53,36 +58,74 @@ const SalesTimeline: React.FC = () => {
     }
   };
 
+  const filteredTransactions = useMemo(() => {
+    if (!searchTerm) return transactions;
+    return transactions.filter(t => 
+      t.items.some((item: any) => 
+        item.productos?.nombre.toLowerCase().includes(searchTerm.toLowerCase())
+      )
+    );
+  }, [transactions, searchTerm]);
+
+  const isToday = selectedDate === new Date().toISOString().split('T')[0];
+  const totalCaja = filteredTransactions.reduce((s,t) => s+t.total_venta, 0);
+
+  const getTitle = () => {
+    if (searchTerm) return 'Resultados de Búsqueda';
+    if (isToday) return 'Historial de Hoy';
+    const date = new Date(selectedDate);
+    const timezoneOffset = date.getTimezoneOffset() * 60000;
+    const localDate = new Date(date.getTime() + timezoneOffset);
+    return `Historial de ${localDate.toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })}`;
+  }
+
   if (loading) return (
     <div className="p-24 text-center flex flex-col items-center gap-6">
       <div className="w-14 h-14 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin"></div>
-      <p className="text-[11px] font-black uppercase text-slate-400 tracking-[0.4em]">Auditando Ventas de Hoy...</p>
+      <p className="text-[11px] font-black uppercase text-slate-400 tracking-[0.4em]">Cargando Ventas...</p>
     </div>
   );
 
   return (
     <div className="max-w-4xl mx-auto space-y-10 pb-24 animate-slide-up">
-      <div className="bg-white p-10 rounded-[3.5rem] shadow-sm border border-slate-100 flex flex-col md:flex-row justify-between items-center gap-6 relative overflow-hidden group">
-        <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform"></div>
-        <div className="relative z-10">
-          <h3 className="text-3xl font-black uppercase tracking-tight text-slate-800 leading-none">Historial de Hoy</h3>
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em] mt-3 flex items-center gap-2">
-            <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
-            Bitácora en tiempo real
-          </p>
+      <div className="bg-white p-10 rounded-[3.5rem] shadow-sm border border-slate-100 space-y-8">
+        <div className="flex flex-col md:flex-row justify-between items-center gap-6 relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform"></div>
+            <div className="relative z-10">
+              <h3 className="text-3xl font-black uppercase tracking-tight text-slate-800 leading-none">{getTitle()}</h3>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em] mt-3 flex items-center gap-2">
+                {isToday && !searchTerm && <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>}
+                {filteredTransactions.length} {filteredTransactions.length === 1 ? 'Transacción' : 'Transacciones'}
+              </p>
+            </div>
+            <div className="text-center md:text-right relative z-10">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Caja Registrada</p>
+              <p className="text-5xl font-black text-indigo-600 tracking-tighter">${totalCaja.toLocaleString()}</p>
+            </div>
         </div>
-        <div className="text-center md:text-right relative z-10">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Caja Registrada</p>
-          <p className="text-5xl font-black text-indigo-600 tracking-tighter">${transactions.reduce((s,t) => s+t.total_venta, 0).toLocaleString()}</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-slate-100 pt-8">
+           <input 
+              type="date" 
+              className="w-full px-5 py-3 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs uppercase focus:border-indigo-600 outline-none transition-all shadow-sm"
+              value={selectedDate}
+              onChange={e => setSelectedDate(e.target.value)}
+            />
+            <input 
+              type="text" 
+              placeholder="Buscar en resultados por producto..."
+              className="w-full px-5 py-3 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs uppercase focus:border-indigo-600 outline-none transition-all shadow-sm"
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+            />
         </div>
       </div>
 
       <div className="space-y-5">
-        {transactions.length === 0 ? (
+        {filteredTransactions.length === 0 ? (
           <div className="bg-white p-28 rounded-[4rem] border border-dashed border-slate-200 text-center">
-            <p className="text-slate-300 font-black uppercase text-[10px] tracking-widest">No se registran transacciones el día de hoy</p>
+            <p className="text-slate-300 font-black uppercase text-[10px] tracking-widest">No se registran transacciones para este filtro</p>
           </div>
-        ) : transactions.map(t => (
+        ) : filteredTransactions.map(t => (
           <div 
             key={t.transaccion_id} 
             onClick={() => setSelectedTransaction(t)} 
@@ -98,7 +141,7 @@ const SalesTimeline: React.FC = () => {
                   {t.items[0]?.productos?.nombre} {t.items.length > 1 ? `+${t.items.length-1} items` : ''}
                 </p>
                 <div className="flex items-center gap-3 mt-2">
-                   <span className="text-[8px] text-indigo-500 font-black uppercase bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">{t.usuario || 'Operador'}</span>
+                   <span className="text-[8px] text-indigo-500 font-black uppercase bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">{t.vendedor || 'N/A'}</span>
                    <span className="text-[8px] text-slate-400 font-black uppercase tracking-tighter">REF: {t.transaccion_id.slice(0,8)}</span>
                 </div>
               </div>
@@ -132,6 +175,7 @@ const SalesTimeline: React.FC = () => {
             
             <div className="p-10 space-y-8">
               <div className="space-y-4">
+                <p className="text-[9px] text-slate-400 font-bold text-center">Vendido por: <span className="font-black text-indigo-500">{selectedTransaction.vendedor || 'N/A'}</span></p>
                 {selectedTransaction.items.map((item: any, i: number) => (
                   <div key={i} className="flex justify-between items-center text-xs group">
                     <div className="flex-1">

@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
 import { Producto, Usuario } from '../types';
 
@@ -9,9 +9,10 @@ interface InventoryProps {
 }
 
 const Inventory: React.FC<InventoryProps> = ({ user, setView }) => {
-  const [products, setProducts] = useState<Producto[]>([]);
+  const [allProducts, setAllProducts] = useState<Producto[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterType, setFilterType] = useState('nombre'); // 'nombre', 'vencimiento', 'stock'
   const [showModal, setShowModal] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -44,8 +45,9 @@ const Inventory: React.FC<InventoryProps> = ({ user, setView }) => {
         .from('productos')
         .select('*')
         .order('nombre', { ascending: true });
+
       if (error) throw error;
-      if (data) setProducts(data);
+      if (data) setAllProducts(data);
     } catch (err: any) {
       console.error(err);
     } finally {
@@ -56,7 +58,6 @@ const Inventory: React.FC<InventoryProps> = ({ user, setView }) => {
   const handleOpenModal = (p?: Producto) => {
     setSaveError(null);
     if (p) {
-      // Si las unidades por caja son 1, asumimos que es modalidad simple
       const isSimple = (p.unidades_por_caja || 1) <= 1;
       setManagementMode(isSimple ? 'simple' : 'box');
       setFormData({
@@ -112,7 +113,6 @@ const Inventory: React.FC<InventoryProps> = ({ user, setView }) => {
         const { error } = await supabase.from('productos').update(payload).eq('id', formData.id);
         if (error) throw error;
         
-        // AUDITORIA
         await supabase.from('audit_logs').insert({
             usuario_id: user.id,
             accion: 'EDICION_PRODUCTO',
@@ -124,7 +124,6 @@ const Inventory: React.FC<InventoryProps> = ({ user, setView }) => {
         const { error } = await supabase.from('productos').insert([{ ...payload, stock: 0 }]);
         if (error) throw error;
 
-        // AUDITORIA
         await supabase.from('audit_logs').insert({
             usuario_id: user.id,
             accion: 'CREACION_PRODUCTO',
@@ -142,21 +141,67 @@ const Inventory: React.FC<InventoryProps> = ({ user, setView }) => {
     }
   };
 
-  const filtered = products.filter(p => 
-    p.nombre.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    (p.codigo_barras && p.codigo_barras.includes(searchTerm)) ||
-    (p.laboratorio && p.laboratorio.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
-  
-  // Estadísticas rápidas
-  const totalRefs = products.length;
-  const totalStock = products.reduce((acc, p) => acc + (p.stock || 0), 0);
-  const lowStock = products.filter(p => (p.stock || 0) < 10).length;
+  const { totalRefs, totalStock, lowStock } = useMemo(() => {
+    return allProducts.reduce((acc, p) => {
+        acc.totalStock += p.stock || 0;
+        if ((p.stock || 0) < 10) {
+            acc.lowStock += 1;
+        }
+        return acc;
+    }, { totalStock: 0, lowStock: 0, totalRefs: allProducts.length });
+  }, [allProducts]);
+
+  const displayedProducts = useMemo(() => {
+    let products = [...allProducts];
+
+    if (searchTerm) {
+        const lowercasedTerm = searchTerm.toLowerCase();
+        products = products.filter(p =>
+            p.nombre.toLowerCase().includes(lowercasedTerm) ||
+            (p.laboratorio && p.laboratorio.toLowerCase().includes(lowercasedTerm)) ||
+            (p.codigo_barras && p.codigo_barras.includes(lowercasedTerm))
+        );
+    }
+
+    if (filterType === 'vencimiento') {
+        products.sort((a, b) => {
+            if (!a.fecha_vencimiento) return 1;
+            if (!b.fecha_vencimiento) return -1;
+            return new Date(a.fecha_vencimiento).getTime() - new Date(b.fecha_vencimiento).getTime();
+        });
+    } else if (filterType === 'stock') {
+        products.sort((a, b) => (a.stock || 0) - (b.stock || 0));
+    } else { // 'nombre'
+        products.sort((a, b) => a.nombre.localeCompare(b.nombre));
+    }
+
+    if (!searchTerm) {
+        return products.slice(0, 5);
+    }
+
+    return products;
+  }, [allProducts, searchTerm, filterType]);
+
+  const getVencimientoStatus = (fecha: string | null) => {
+      if (!fecha) return { text: 'Sin Fecha', color: 'text-slate-400' };
+      
+      const hoy = new Date();
+      const vencimiento = new Date(fecha);
+      const diffTime = vencimiento.getTime() - hoy.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      const formatted = vencimiento.toLocaleDateString('es-CO', { year: 'numeric', month: 'short', day: 'numeric' });
+
+      if (diffDays < 0) return { text: `Vencido (${formatted})`, color: 'text-white bg-red-700' };
+      if (diffDays <= 30) return { text: `${formatted}`, color: 'text-red-600 font-black' };
+      if (diffDays <= 90) return { text: `${formatted}`, color: 'text-amber-600 font-bold' };
+      
+      return { text: formatted, color: 'text-slate-600' };
+  };
 
   return (
     <div className="space-y-6 animate-slide-up pb-10">
       
-      {/* Sección de Estadísticas Superiores */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-slate-900 text-white p-6 rounded-[2.5rem] shadow-xl flex items-center justify-between relative overflow-hidden group">
              <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/20 rounded-full -mr-10 -mt-10 group-hover:scale-150 transition-transform"></div>
@@ -184,16 +229,24 @@ const Inventory: React.FC<InventoryProps> = ({ user, setView }) => {
         </div>
       </div>
 
-      <div className="flex flex-col lg:flex-row justify-between items-center gap-4 bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100">
-        <div className="relative flex-1 w-full">
-          <input type="text" className="w-full pl-14 pr-6 py-4 bg-slate-50 border-2 border-transparent rounded-2xl outline-none font-bold text-sm focus:bg-white focus:border-indigo-600" placeholder="Buscar medicamento, lab o código..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-          <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg></div>
+      <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100 space-y-4">
+        <div className="flex flex-col lg:flex-row justify-between items-center gap-4">
+            <div className="relative flex-1 w-full">
+              <input type="text" className="w-full pl-14 pr-6 py-4 bg-slate-50 border-2 border-transparent rounded-2xl outline-none font-bold text-sm focus:bg-white focus:border-indigo-600" placeholder="Buscar medicamento, lab o código..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+              <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg></div>
+            </div>
+            {isAdmin && (
+              <button onClick={() => handleOpenModal()} className="w-full lg:w-auto bg-slate-950 text-white px-10 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl hover:bg-emerald-600 transition-all">
+                + Nuevo Producto
+              </button>
+            )}
         </div>
-        {isAdmin && (
-          <button onClick={() => handleOpenModal()} className="w-full lg:w-auto bg-slate-950 text-white px-10 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl hover:bg-emerald-600 transition-all">
-            + Nuevo Producto
-          </button>
-        )}
+        <div className="flex items-center gap-2 border-t border-slate-100 pt-4">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mr-2">Filtros:</p>
+            <button onClick={() => setFilterType('nombre')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${filterType === 'nombre' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>A-Z</button>
+            <button onClick={() => setFilterType('vencimiento')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${filterType === 'vencimiento' ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>Próximos a Vencer</button>
+            <button onClick={() => setFilterType('stock')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${filterType === 'stock' ? 'bg-rose-500 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>Por Agotarse</button>
+        </div>
       </div>
 
       <div className="bg-white rounded-[3rem] shadow-sm border border-slate-100 overflow-hidden">
@@ -204,62 +257,70 @@ const Inventory: React.FC<InventoryProps> = ({ user, setView }) => {
                 <th className="px-8 py-6 text-left">Medicamento</th>
                 <th className="px-8 py-6 text-left">Información</th>
                 <th className="px-8 py-6 text-center">Stock (Cajas + Unid)</th>
+                <th className="px-8 py-6 text-center">Vencimiento</th>
                 <th className="px-8 py-6 text-center">PVP Caja</th>
                 <th className="px-8 py-6 text-center">PVP Unidad</th>
                 <th className="px-10 py-6 text-center">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {filtered.map(p => {
-                const unitsPerBox = p.unidades_por_caja || 1;
-                const boxes = Math.floor(p.stock / unitsPerBox);
-                const leftovers = p.stock % unitsPerBox;
-                
-                return (
-                  <tr key={p.id} className="hover:bg-slate-50/50 transition-all group">
-                    <td className="px-8 py-6">
-                      <p className="font-black text-slate-900 text-xs uppercase">{p.nombre}</p>
-                      <p className="text-[8px] text-slate-300 font-bold mt-1 bg-slate-100 px-2 py-0.5 rounded w-fit">{p.codigo_barras || 'Sin Código'}</p>
-                    </td>
-                    <td className="px-8 py-6">
-                      <p className="text-[9px] text-indigo-500 font-black uppercase tracking-wider mb-1">{p.laboratorio || 'GENÉRICO'}</p>
-                      {p.descripcion ? (
-                         <p className="text-[9px] text-slate-500 font-medium italic line-clamp-2 max-w-[180px] leading-tight mb-1">{p.descripcion}</p>
-                      ) : (
-                         <span className="text-[8px] text-slate-300 italic block mb-1">Sin notas</span>
-                      )}
-                      <p className="text-[8px] text-slate-400 font-bold uppercase flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 bg-slate-300 rounded-full"></span>
-                        {p.ubicacion || 'General'}
-                      </p>
-                    </td>
-                    <td className="px-8 py-6 text-center">
-                      <div className={`inline-flex flex-col items-center px-4 py-2 rounded-xl border ${p.stock < unitsPerBox ? 'bg-rose-50 border-rose-100 text-rose-600' : 'bg-emerald-50 border-emerald-100 text-emerald-600'}`}>
-                        <span className="text-sm font-black whitespace-nowrap">
-                          {unitsPerBox > 1 ? `${boxes} Caja(s) + ${leftovers} Unid` : `${p.stock} Unid`}
-                        </span>
-                        <span className="text-[8px] font-black uppercase opacity-60">Total: {p.stock} Unid</span>
-                      </div>
-                    </td>
-                    <td className="px-8 py-6 text-center font-black text-slate-900 text-sm">
-                      {p.precio > 0 ? `$${p.precio.toLocaleString()}` : '---'}
-                    </td>
-                    <td className="px-8 py-6 text-center font-black text-indigo-600 text-sm">
-                      ${(p.precio_unidad || 0).toLocaleString()}
-                    </td>
-                    <td className="px-10 py-6 text-center">
-                      <button onClick={() => handleOpenModal(p)} className="p-3 bg-slate-100 text-slate-400 hover:text-indigo-600 rounded-xl hover:bg-white border border-transparent hover:border-slate-100 transition-all">
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
+              {loading ? (
+                <tr><td colSpan={7} className="py-20 text-center text-slate-300 font-black uppercase text-[10px] tracking-[0.3em]">Cargando inventario...</td></tr>
+              ) : displayedProducts.length > 0 ? (
+                displayedProducts.map(p => {
+                  const unitsPerBox = p.unidades_por_caja || 1;
+                  const boxes = Math.floor(p.stock / unitsPerBox);
+                  const leftovers = p.stock % unitsPerBox;
+                  const vencimiento = getVencimientoStatus(p.fecha_vencimiento || null);
+                  
+                  return (
+                    <tr key={p.id} className="hover:bg-slate-50/50 transition-all group">
+                      <td className="px-8 py-6">
+                        <p className="font-black text-slate-900 text-xs uppercase">{p.nombre}</p>
+                        <p className="text-[8px] text-slate-300 font-bold mt-1 bg-slate-100 px-2 py-0.5 rounded w-fit">{p.codigo_barras || 'Sin Código'}</p>
+                      </td>
+                      <td className="px-8 py-6">
+                        <p className="text-[9px] text-indigo-500 font-black uppercase tracking-wider mb-1">{p.laboratorio || 'GENÉRICO'}</p>
+                        {p.descripcion ? (
+                          <p className="text-[9px] text-slate-500 font-medium italic line-clamp-2 max-w-[180px] leading-tight mb-1">{p.descripcion}</p>
+                        ) : (
+                          <span className="text-[8px] text-slate-300 italic block mb-1">Sin notas</span>
+                        )}
+                        <p className="text-[8px] text-slate-400 font-bold uppercase flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 bg-slate-300 rounded-full"></span>
+                          {p.ubicacion || 'General'}
+                        </p>
+                      </td>
+                      <td className="px-8 py-6 text-center">
+                        <div className={`inline-flex flex-col items-center px-4 py-2 rounded-xl border ${p.stock < unitsPerBox ? 'bg-rose-50 border-rose-100 text-rose-600' : 'bg-emerald-50 border-emerald-100 text-emerald-600'}`}>
+                          <span className="text-sm font-black whitespace-nowrap">
+                            {unitsPerBox > 1 ? `${boxes} Caja(s) + ${leftovers} Unid` : `${p.stock} Unid`}
+                          </span>
+                          <span className="text-[8px] font-black uppercase opacity-60">Total: {p.stock} Unid</span>
+                        </div>
+                      </td>
+                      <td className="px-8 py-6 text-center">
+                          <span className={`px-3 py-1.5 rounded-lg text-[10px] font-mono ${vencimiento.color}`}>{vencimiento.text}</span>
+                      </td>
+                      <td className="px-8 py-6 text-center font-black text-slate-900 text-sm">
+                        {p.precio > 0 ? `$${p.precio.toLocaleString()}` : '---'}
+                      </td>
+                      <td className="px-8 py-6 text-center font-black text-indigo-600 text-sm">
+                        ${(p.precio_unidad || 0).toLocaleString()}
+                      </td>
+                      <td className="px-10 py-6 text-center">
+                        <button onClick={() => handleOpenModal(p)} className="p-3 bg-slate-100 text-slate-400 hover:text-indigo-600 rounded-xl hover:bg-white border border-transparent hover:border-slate-100 transition-all">
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr><td colSpan={7} className="py-20 text-center text-slate-300 font-black uppercase text-[10px] tracking-[0.3em]">{!searchTerm ? 'No hay productos registrados' : 'No se encontraron productos para esta búsqueda'}</td></tr>
+              )}
             </tbody>
           </table>
-          {filtered.length === 0 && !loading && (
-             <div className="py-20 text-center text-slate-300 font-black uppercase text-[10px] tracking-[0.3em]">No hay productos registrados</div>
-          )}
         </div>
       </div>
 

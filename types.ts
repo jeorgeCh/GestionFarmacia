@@ -57,6 +57,7 @@ export interface Producto {
   stock: number; 
   unidades_por_caja: number; // Nuevo campo
   ubicacion?: string;
+  lote?: string;
   fecha_vencimiento?: string;
   created_at: string;
   descuentos?: Descuento[];

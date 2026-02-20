@@ -1,7 +1,110 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
 import { Producto, Usuario } from '../types';
+
+interface ProductCardProps {
+  product: Producto;
+  saleMode: 'caja' | 'unidad';
+  onAddToCart: (product: Producto) => void;
+  onSetSaleMode: (productId: number, mode: 'caja' | 'unidad') => void;
+  getReservedUnits: (productId: number) => number;
+}
+
+const ProductCard: React.FC<ProductCardProps> = ({ product, saleMode, onAddToCart, onSetSaleMode, getReservedUnits }) => {
+  const unitsPerBox = product.unidades_por_caja || 1;
+  const mode = unitsPerBox === 1 ? 'unidad' : saleMode;
+
+  const reservedInUnits = getReservedUnits(product.id);
+  const effectiveStockInUnits = Math.max(0, product.stock - reservedInUnits);
+  
+  const boxesAvailable = Math.floor(effectiveStockInUnits / unitsPerBox);
+  const unitsAvailable = effectiveStockInUnits % unitsPerBox;
+
+  const getDiscountPercentage = (p: Producto): number => {
+    if (p.descuentos && p.descuentos.length > 0) {
+      return Number(p.descuentos[0].porcentaje);
+    }
+    return 0;
+  };
+
+  const discountPercent = getDiscountPercentage(product);
+  const basePrice = mode === 'unidad' ? (Number(product.precio_unidad) || 0) : (Number(product.precio) || 0);
+  const finalPrice = basePrice * (1 - discountPercent / 100);
+
+  return (
+    <div className={`bg-white p-4 rounded-[1.5rem] border-2 transition-all group flex flex-col justify-between relative overflow-hidden shadow-sm ${discountPercent > 0 ? 'border-emerald-400/70' : 'border-slate-100 hover:border-indigo-400'}`}>
+      <div className="mb-3">
+        <div className="flex justify-between items-center mb-1">
+            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest truncate max-w-[90px]">{product.laboratorio || 'Generico'}</span>
+            {unitsPerBox > 1 && (
+                  <span className="text-[8px] font-bold bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded border border-indigo-100 flex items-center gap-1">
+                    <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+                    Caja x {unitsPerBox}
+                  </span>
+            )}
+        </div>
+        <h4 className="font-black text-slate-800 text-xs uppercase leading-normal h-9 overflow-hidden" title={product.nombre}>{product.nombre}</h4>
+        {product.descripcion && <p className="text-[10px] text-slate-500 font-medium h-8 overflow-hidden mt-1">{product.descripcion}</p>}
+      </div>
+
+      <div className="space-y-3">
+        <div>
+            <div className="flex justify-between items-end mb-1">
+                <span className="text-[8px] font-bold text-slate-400 uppercase">Disponible</span>
+                <span className={`text-[9px] font-black uppercase ${effectiveStockInUnits < 10 ? 'text-rose-500' : 'text-slate-600'}`}>
+                    {unitsPerBox > 1 
+                        ? `${boxesAvailable} Cajas / ${unitsAvailable} Und` 
+                        : `${effectiveStockInUnits} Unidades`
+                    }
+                </span>
+            </div>
+            <div className={`w-full h-1.5 rounded-full overflow-hidden bg-slate-100`}>
+              <div 
+                  className={`h-full rounded-full ${effectiveStockInUnits < 10 ? 'bg-rose-500' : 'bg-emerald-500'}`} 
+                  style={{width: `${Math.min((effectiveStockInUnits / product.stock) * 100, 100)}%`}}
+              ></div>
+            </div>
+        </div>
+
+        <div className={`flex items-center justify-between p-2 rounded-xl border ${discountPercent > 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 border-slate-100'}`}>
+            <div className="flex-1 flex flex-col pr-2 overflow-hidden">
+                <span className={`text-[8px] font-black uppercase mb-0.5 ${discountPercent > 0 ? 'text-emerald-800' : 'text-slate-400'}`}>
+                    {discountPercent > 0 ? 'Precio Oferta' : 'Precio'}
+                </span>
+                {discountPercent > 0 ? (
+                    <div className="flex items-baseline gap-1">
+                        <span className="text-lg font-black text-emerald-600 leading-none">${finalPrice.toLocaleString()}</span>
+                        <span className="text-[11px] font-bold text-rose-400 line-through leading-none">${basePrice.toLocaleString()}</span>
+                    </div>
+                ) : (
+                    <span className="text-lg font-black text-slate-900 leading-none">${finalPrice.toLocaleString()}</span>
+                )}
+            </div>
+            
+            {unitsPerBox > 1 ? (
+                <div className="flex bg-white rounded-lg p-0.5 shadow-sm border border-slate-200 shrink-0">
+                    <button onClick={() => onSetSaleMode(product.id, 'unidad')} className={`px-2 py-1.5 rounded-md text-[8px] font-black uppercase transition-all ${mode === 'unidad' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400'}`}>Und</button>
+                    <button onClick={() => onSetSaleMode(product.id, 'caja')} className={`px-2 py-1.5 rounded-md text-[8px] font-black uppercase transition-all ${mode === 'caja' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-400'}`}>Caja</button>
+                </div>
+            ) : (
+                <div className="p-0.5 shrink-0">
+                    <span className="px-3 py-1.5 rounded-md text-[8px] font-black uppercase bg-slate-100 text-slate-400 border border-slate-200">Individual</span>
+                </div>
+            )}
+        </div>
+
+        <button 
+            onClick={() => onAddToCart(product)} 
+            disabled={effectiveStockInUnits <= 0 || (mode === 'caja' && effectiveStockInUnits < unitsPerBox)} 
+            className="w-full py-2.5 bg-slate-950 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 active:scale-95 transition-all shadow-lg disabled:opacity-50 disabled:shadow-none flex items-center justify-center gap-1">
+            {effectiveStockInUnits <= 0 ? 'Agotado' : (mode === 'caja' && effectiveStockInUnits < unitsPerBox) ? 'Incompleto' : <>Agregar <span className="text-emerald-400">+</span></>}
+        </button>
+      </div>
+    </div>
+  );
+};
+
 
 interface POSProps {
   user: Usuario;
@@ -18,7 +121,8 @@ interface CartItem {
 }
 
 const POS: React.FC<POSProps> = ({ user }) => {
-  const [products, setProducts] = useState<Producto[]>([]);
+  const [allProducts, setAllProducts] = useState<Producto[]>([]);
+  const [topProducts, setTopProducts] = useState<Producto[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [cashReceived, setCashReceived] = useState<number | string>('');
@@ -33,43 +137,50 @@ const POS: React.FC<POSProps> = ({ user }) => {
   const [isScanning, setIsScanning] = useState(false);
 
   useEffect(() => {
-    fetchProducts();
+    fetchData();
     if (searchInputRef.current) searchInputRef.current.focus();
     return () => stopScanner();
   }, []);
 
-  const fetchProducts = async () => {
+  const fetchData = async () => {
     try {
-      const { data: productsData } = await supabase
-        .from('productos')
-        .select('*')
-        .gt('stock', 0)
-        .order('nombre');
+      const [productsRes, discountsRes, ventasRes] = await Promise.all([
+          supabase.from('productos').select('*').gt('stock', 0),
+          supabase.from('descuentos').select('*').eq('activo', true),
+          supabase.from('ventas').select('producto_id, cantidad')
+      ]);
+
+      const productsData = productsRes.data || [];
+      const discountsData = discountsRes.data || [];
+      const ventasData = ventasRes.data || [];
+
+      const salesCounts = ventasData.reduce((acc, venta) => {
+        acc[venta.producto_id] = (acc[venta.producto_id] || 0) + venta.cantidad;
+        return acc;
+      }, {} as Record<number, number>);
+
+      const productsWithDetails = productsData.map(p => ({
+        ...p,
+        unidades_por_caja: p.unidades_por_caja || 1, 
+        descuentos: discountsData?.filter(d => d.producto_id === p.id) || [],
+        totalSold: salesCounts[p.id] || 0
+      }));
+
+      const sortedBySales = [...productsWithDetails].sort((a, b) => b.totalSold - a.totalSold);
       
-      const { data: discountsData } = await supabase
-        .from('descuentos')
-        .select('*')
-        .eq('activo', true);
+      setAllProducts(productsWithDetails);
+      setTopProducts(sortedBySales.slice(0, 6));
 
-      if (productsData) {
-        const mergedProducts = productsData.map(p => ({
-          ...p,
-          unidades_por_caja: p.unidades_por_caja || 1, 
-          descuentos: discountsData?.filter(d => d.producto_id === p.id) || []
-        }));
-
-        setProducts(mergedProducts);
-
-        setSaleModes(prev => {
-          const next = { ...prev };
-          mergedProducts.forEach(p => {
-            if (!next[p.id]) next[p.id] = 'unidad';
-          });
-          return next;
+      setSaleModes(prev => {
+        const next = { ...prev };
+        productsData.forEach(p => {
+          if (!next[p.id]) next[p.id] = 'unidad';
         });
-      }
+        return next;
+      });
+
     } catch (error) {
-      console.error("Error cargando inventario POS:", error);
+      console.error("Error cargando datos para POS:", error);
     }
   };
 
@@ -89,7 +200,7 @@ const POS: React.FC<POSProps> = ({ user }) => {
               if (codes.length > 0) {
                 const codeValue = codes[0].rawValue;
                 setSearchTerm(codeValue);
-                const found = products.find(p => p.codigo_barras === codeValue);
+                const found = allProducts.find(p => p.codigo_barras === codeValue);
                 if (found) addToCart(found);
                 stopScanner();
               }
@@ -125,7 +236,6 @@ const POS: React.FC<POSProps> = ({ user }) => {
 
   const addToCart = (product: Producto) => {
     const unitsPerBox = product.unidades_por_caja || 1;
-    // LÓGICA CLAVE: Si unidades_por_caja es 1, forzamos SIEMPRE modo 'unidad', ignorando el estado.
     const mode = unitsPerBox === 1 ? 'unidad' : (saleModes[product.id] || 'unidad');
     
     const currentReserved = getReservedUnits(product.id);
@@ -234,13 +344,11 @@ const POS: React.FC<POSProps> = ({ user }) => {
       const { error: saleError } = await supabase.from('ventas').insert(salesToInsert);
       if (saleError) throw saleError;
 
-      // Actualizar Stock
       for (const item of cart) {
         const qtyToDeductInUnits = item.cantidad * (item.saleMode === 'caja' ? item.unitsPerBox : 1);
         await supabase.rpc('deduct_stock', { p_id: item.product.id, p_qty: qtyToDeductInUnits });
       }
 
-      // AUDITORIA
       await supabase.from('audit_logs').insert({
           usuario_id: userId,
           accion: 'VENTA',
@@ -259,7 +367,7 @@ const POS: React.FC<POSProps> = ({ user }) => {
       });
       setCart([]);
       setCashReceived('');
-      fetchProducts();
+      fetchData();
     } catch (err: any) {
       console.error("Error en venta:", err);
       alert("Error al procesar la venta.");
@@ -268,16 +376,20 @@ const POS: React.FC<POSProps> = ({ user }) => {
     }
   };
 
-  const filteredProducts = products.filter(p => 
-    p.nombre.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    (p.codigo_barras && p.codigo_barras.includes(searchTerm)) ||
-    p.laboratorio?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const productsToDisplay = useMemo(() => {
+    if (!searchTerm) {
+        return topProducts;
+    }
+    return allProducts.filter(p => 
+      p.nombre.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      (p.codigo_barras && p.codigo_barras.includes(searchTerm)) ||
+      p.laboratorio?.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [searchTerm, allProducts, topProducts]);
 
   return (
     <div className="relative lg:h-[calc(100vh-140px)] h-auto animate-slide-up">
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-full">
-        {/* PANEL IZQUIERDO: PRODUCTOS */}
         <div className="lg:col-span-7 flex flex-col space-y-4 lg:h-full min-h-[500px]">
           <div className="relative group shrink-0">
             <input
@@ -294,114 +406,25 @@ const POS: React.FC<POSProps> = ({ user }) => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 lg:overflow-y-auto custom-scrollbar flex-1 pb-20 pr-1 content-start">
-            {filteredProducts.map(product => {
-              const unitsPerBox = product.unidades_por_caja || 1;
-              const mode = unitsPerBox === 1 ? 'unidad' : (saleModes[product.id] || 'unidad');
-              
-              const reservedInUnits = getReservedUnits(product.id);
-              const effectiveStockInUnits = Math.max(0, product.stock - reservedInUnits);
-              
-              // CÁLCULO DE CAJAS Y UNIDADES
-              const boxesAvailable = Math.floor(effectiveStockInUnits / unitsPerBox);
-              const unitsAvailable = effectiveStockInUnits % unitsPerBox;
-              
-              const basePrice = mode === 'unidad' ? (Number(product.precio_unidad) || 0) : (Number(product.precio) || 0);
-              const discountPercent = getDiscountPercentage(product);
-              const finalPrice = basePrice * (1 - discountPercent / 100);
-
-              return (
-                <div key={product.id} className={`bg-white p-4 rounded-[1.5rem] border hover:border-indigo-300 transition-all group flex flex-col justify-between relative overflow-hidden shadow-sm hover:shadow-lg ${discountPercent > 0 ? 'border-rose-200' : 'border-slate-100'}`}>
-                  {discountPercent > 0 && (
-                    <div className="absolute top-0 right-0 bg-rose-500 text-white px-2 py-1 rounded-bl-xl font-black text-[9px] uppercase z-10 shadow-sm">
-                      -{Math.round(discountPercent)}%
-                    </div>
-                  )}
-                  
-                  <div className="mb-3">
-                    <div className="flex justify-between items-center mb-1">
-                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest truncate max-w-[90px]">{product.laboratorio || 'Generico'}</span>
-                        {unitsPerBox > 1 && (
-                             <span className="text-[8px] font-bold bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded border border-indigo-100 flex items-center gap-1">
-                                <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
-                                Caja x {unitsPerBox}
-                             </span>
-                        )}
-                    </div>
-                    <h4 className="font-black text-slate-800 text-xs uppercase leading-snug line-clamp-2 min-h-[2.5em]" title={product.nombre}>{product.nombre}</h4>
-                    <span className="text-[9px] font-bold text-slate-300 uppercase flex items-center gap-1 mt-1">
-                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                        {product.ubicacion || 'General'}
-                    </span>
-                  </div>
-
-                  <div className="space-y-3">
-                    {/* Indicador de Stock Visual */}
-                    <div>
-                        <div className="flex justify-between items-end mb-1">
-                            <span className="text-[8px] font-bold text-slate-400 uppercase">Disponible</span>
-                            <span className={`text-[9px] font-black uppercase ${effectiveStockInUnits < 10 ? 'text-rose-500' : 'text-slate-600'}`}>
-                                {unitsPerBox > 1 
-                                    ? `${boxesAvailable} Cajas / ${unitsAvailable} Und` 
-                                    : `${effectiveStockInUnits} Unidades`
-                                }
-                            </span>
-                        </div>
-                        <div className={`w-full h-1.5 rounded-full overflow-hidden bg-slate-100`}>
-                          <div 
-                              className={`h-full rounded-full ${effectiveStockInUnits < 10 ? 'bg-rose-500' : 'bg-emerald-500'}`} 
-                              style={{width: `${Math.min((effectiveStockInUnits / 50) * 100, 100)}%`}}
-                          ></div>
-                        </div>
-                    </div>
-
-                    {/* Precio y Toggle */}
-                    <div className="flex items-center justify-between bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                        <div className="flex flex-col">
-                          <span className="text-[8px] font-black text-slate-400 uppercase">Precio</span>
-                          <span className="text-sm font-black text-slate-900 leading-none">${finalPrice.toLocaleString()}</span>
-                        </div>
-                        
-                        {unitsPerBox > 1 ? (
-                          <div className="flex bg-white rounded-lg p-0.5 shadow-sm border border-slate-200">
-                              <button 
-                                onClick={() => setSaleModes({...saleModes, [product.id]: 'unidad'})}
-                                className={`px-2 py-1.5 rounded-md text-[8px] font-black uppercase transition-all ${mode === 'unidad' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-300 hover:text-slate-500'}`}
-                              >
-                                Und
-                              </button>
-                              <button 
-                                onClick={() => setSaleModes({...saleModes, [product.id]: 'caja'})}
-                                className={`px-2 py-1.5 rounded-md text-[8px] font-black uppercase transition-all ${mode === 'caja' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-300 hover:text-slate-500'}`}
-                              >
-                                Caja
-                              </button>
-                          </div>
-                        ) : (
-                          <span className="text-[8px] font-black text-slate-300 uppercase px-2">Individual</span>
-                        )}
-                    </div>
-
-                    <button 
-                        onClick={() => addToCart(product)} 
-                        disabled={effectiveStockInUnits <= 0 || (mode === 'caja' && effectiveStockInUnits < unitsPerBox)} 
-                        className="w-full py-2.5 bg-slate-950 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 active:scale-95 transition-all shadow-lg disabled:opacity-50 disabled:shadow-none flex items-center justify-center gap-1"
-                    >
-                        {effectiveStockInUnits <= 0 ? 'Agotado' : (mode === 'caja' && effectiveStockInUnits < unitsPerBox) ? 'Incompleto' : <>Agregar <span className="text-emerald-400">+</span></>}
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-            {filteredProducts.length === 0 && (
+          <div className={`grid grid-cols-1 sm:grid-cols-2 ${searchTerm ? 'xl:grid-cols-2' : 'xl:grid-cols-3'} gap-3 lg:overflow-y-auto custom-scrollbar flex-1 pb-20 pr-1 content-start`}>
+            {productsToDisplay.map(product => (
+              <ProductCard 
+                key={product.id}
+                product={product}
+                saleMode={saleModes[product.id] || 'unidad'}
+                onAddToCart={addToCart}
+                onSetSaleMode={(pid: number, mode: 'caja' | 'unidad') => setSaleModes({...saleModes, [pid]: mode})}
+                getReservedUnits={getReservedUnits}
+              />
+            ))}
+            {productsToDisplay.length === 0 && (
               <div className="col-span-full py-20 text-center opacity-50">
-                 <p className="font-black text-slate-400 uppercase text-xs tracking-widest">No se encontraron productos</p>
+                 <p className="font-black text-slate-400 uppercase text-xs tracking-widest">{searchTerm ? 'No se encontraron productos' : 'Cargando productos más vendidos...'}</p>
               </div>
             )}
           </div>
         </div>
 
-        {/* PANEL DERECHO: CARRITO */}
         <div className="lg:col-span-5 flex flex-col bg-white lg:rounded-[2.5rem] shadow-xl border border-slate-100 overflow-hidden h-full rounded-t-[2.5rem] mt-4 lg:mt-0">
           <div className="p-5 bg-slate-900 text-white shrink-0 flex flex-col gap-4">
             <div className="flex justify-between items-start">
@@ -455,7 +478,7 @@ const POS: React.FC<POSProps> = ({ user }) => {
                     <input type="number" className="w-full pl-8 pr-4 py-3 rounded-xl border-2 border-slate-100 font-black text-xl outline-none focus:border-emerald-500 bg-slate-50" placeholder="PAGA CON" value={cashReceived} onChange={e => setCashReceived(e.target.value)} />
                   </div>
                   {Number(cashReceived) >= totalAmount && (
-                    <div className="flex justify-between items-center px-3 py-2 bg-emerald-50 rounded-lg border border-emerald-100"><span className="text-[10px] font-black text-emerald-600 uppercase">Cambio:</span><span className="text-xl font-black text-emerald-600">${changeDue.toLocaleString()}</span></div>
+                    <div className="flex justify-between items-center px-3 py-2 bg-emerald-50 rounded-lg border border-emerald-100"><span className="text-[10px] font-black text-emerald-600 uppercase">Cambio:</span><span className="text-xl font-black text-emerald-600">`${changeDue.toLocaleString()}`</span></div>
                   )}
                </div>
              )}
