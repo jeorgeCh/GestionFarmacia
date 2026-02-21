@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
 import { Producto, Usuario } from '../types';
@@ -304,6 +303,39 @@ const POS: React.FC<POSProps> = ({ user }) => {
   const totalAmount = cart.reduce((sum, item) => sum + (item.finalPrice * item.cantidad), 0);
   const changeDue = (Number(cashReceived) || 0) - totalAmount;
 
+  const printTicket = async (orderSummary: any) => {
+    const ticketItems = orderSummary.items.map((item: CartItem) => ({
+      name: `${item.product.nombre} ${item.saleMode === 'caja' ? `(x${item.unitsPerBox})` : ''}`,
+      price: item.finalPrice,
+      quantity: item.cantidad,
+    }));
+
+    const ticketData = {
+      items: ticketItems,
+      total: orderSummary.total,
+    };
+
+    try {
+      const response = await fetch('http://localhost:4000/imprimir-ticket', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(ticketData),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        console.error('Error al imprimir ticket:', result.message);
+        alert(`La venta se completó, pero falló la impresión: ${result.message}`);
+      } else {
+        console.log('Ticket impreso con éxito.');
+      }
+    } catch (error) {
+      console.error('Error de conexión con servicio de impresión:', error);
+      alert('La venta se completó, pero no se pudo conectar con el servicio de impresión. Verifique que esté activo.');
+    }
+  };
+
   const handleCheckout = async () => {
     if (cart.length === 0 || processing) return;
     
@@ -348,7 +380,7 @@ const POS: React.FC<POSProps> = ({ user }) => {
           detalles: `Ticket #${transactionId.split('-')[0].toUpperCase()} - Total: $${totalAmount.toLocaleString()} - ${cart.length} items`
       });
 
-      setShowOrderSummary({ 
+      const orderSummary = { 
         transactionId: transactionId.split('-')[0].toUpperCase(), 
         items: [...cart], 
         total: totalAmount, 
@@ -356,7 +388,13 @@ const POS: React.FC<POSProps> = ({ user }) => {
         cashReceived: paymentMethod === 'efectivo' ? Number(cashReceived) : totalAmount, 
         change: paymentMethod === 'efectivo' ? changeDue : 0, 
         date: new Date().toLocaleString() 
-      });
+      };
+
+      setShowOrderSummary(orderSummary);
+      
+      // Llamada a la función de impresión
+      await printTicket(orderSummary);
+      
       setCart([]);
       setCashReceived('');
       fetchData();
@@ -479,7 +517,10 @@ const POS: React.FC<POSProps> = ({ user }) => {
                     <input type="number" className="w-full pl-8 pr-4 py-3 rounded-xl border-2 border-slate-100 font-black text-xl outline-none focus:border-emerald-500 bg-slate-50" placeholder="PAGA CON" value={cashReceived} onChange={e => setCashReceived(e.target.value)} />
                   </div>
                   {Number(cashReceived) >= totalAmount && (
-                    <div className="flex justify-between items-center px-3 py-2 bg-emerald-50 rounded-lg border border-emerald-100"><span className="text-[10px] font-black text-emerald-600 uppercase">Cambio:</span><span className="text-xl font-black text-emerald-600">`${changeDue.toLocaleString()}`</span></div>
+                    <div className="flex justify-between items-center px-3 py-2 bg-emerald-50 rounded-lg border border-emerald-100">
+                      <span className="text-[10px] font-black text-emerald-600 uppercase">Cambio:</span>
+                      <span className="text-xl font-black text-emerald-600">${changeDue.toLocaleString()}</span>
+                    </div>
                   )}
                </div>
              )}

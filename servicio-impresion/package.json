@@ -1,0 +1,14 @@
+{
+  "name": "servicio-impresion",
+  "version": "1.0.0",
+  "description": "Servicio para conectar la app web con la impresora fiscal y caja registradora.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^4.19.2",
+    "node-thermal-printer": "^4.1.2"
+  }
+}
