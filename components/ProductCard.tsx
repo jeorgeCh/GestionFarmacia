@@ -12,11 +12,13 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, isAdmin }) =
   const { 
     nombre, 
     laboratorio, 
-    descripcion,
     stock, 
     precio, 
     precio_unidad, 
     unidades_por_caja,
+    forma_farmaceutica,
+    concentracion,
+    registro_sanitario
   } = product;
 
   const unitsPerBox = unidades_por_caja || 1;
@@ -33,6 +35,9 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, isAdmin }) =
   const stockTextColor = !hasStock ? 'text-red-700' : isLowStock ? 'text-amber-700' : 'text-emerald-700';
   const stockBorderColor = !hasStock ? 'border-red-100' : isLowStock ? 'border-amber-100' : 'border-emerald-100';
 
+  const description = [forma_farmaceutica, concentracion, registro_sanitario]
+    .filter(Boolean) // Remove empty or null values
+    .join(' | ');
 
   return (
     <div className={`bg-white rounded-[2.5rem] shadow-sm border border-slate-100 p-6 flex flex-col justify-between transition-all hover:shadow-lg hover:border-indigo-100 group relative`}>
@@ -56,7 +61,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, isAdmin }) =
         </div>
 
         <h3 className="font-black text-slate-900 text-sm uppercase mt-3 truncate pr-8">{nombre}</h3>
-        <p className="text-[9px] text-slate-400 font-medium mt-1 h-8 line-clamp-2">{descripcion || 'Sin descripción detallada.'}</p>
+        <p className="text-[9px] text-slate-400 font-medium mt-1 h-8 line-clamp-2">{description || 'Sin descripción detallada.'}</p>
       </div>
 
       <div className="mt-6 space-y-4">
