@@ -49,6 +49,7 @@ export interface Producto {
   id: number;
   codigo_barras: string;
   nombre: string;
+  descripcion?: string;
   tipo: 'producto' | 'pastillas';
   laboratorio?: string;
   precio: number; 
