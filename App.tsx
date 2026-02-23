@@ -14,8 +14,10 @@ import Discounts from './components/Discounts';
 import SalesTimeline from './components/SalesTimeline';
 import Analytics from './components/Analytics';
 import SuperAdmin from './components/SuperAdmin';
+import HistorialTurnos from './components/HistorialTurnos'; // Importamos el nuevo componente
 
-export type View = 'dashboard' | 'inventory' | 'pos' | 'income' | 'providers' | 'discounts' | 'timeline' | 'analytics' | 'superadmin';
+// Añadimos la nueva vista al tipo
+export type View = 'dashboard' | 'inventory' | 'pos' | 'income' | 'providers' | 'discounts' | 'timeline' | 'analytics' | 'superadmin' | 'historial_turnos';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<Usuario | null>(null);
@@ -32,7 +34,8 @@ const App: React.FC = () => {
       if (savedUser) {
         const parsed = JSON.parse(savedUser);
         if (parsed && parsed.id) {
-          const { data, error } = await supabase.from('usuarios').select('id, role_id, activo, username').eq('id', parsed.id).maybeSingle();
+          // Aseguramos que el rol se obtiene como número
+          const { data, error } = await supabase.from('usuarios').select('id, role_id, activo, username, nombre').eq('id', parsed.id).maybeSingle();
           if (error || !data || !data.activo) {
             handleLogout();
           } else {
@@ -87,6 +90,8 @@ const App: React.FC = () => {
       case 'providers': return isAdmin ? <Providers /> : deniedAccess;
       case 'discounts': return isAdmin ? <Discounts /> : deniedAccess;
       case 'timeline': return isAdmin ? <SalesTimeline /> : deniedAccess;
+      // Añadimos el caso para el historial, restringido a administradores
+      case 'historial_turnos': return isAdmin ? <HistorialTurnos /> : deniedAccess;
       case 'superadmin': return isSuperUser ? <SuperAdmin /> : deniedAccess;
       default: return <Dashboard user={user} setView={setView} />;
     }

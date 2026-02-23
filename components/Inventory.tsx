@@ -28,8 +28,10 @@ const Inventory: React.FC<InventoryProps> = ({ user, setView }) => {
     precio: 0, 
     precio_unidad: 0, 
     unidades_por_caja: 1, 
-    descripcion: '',
-    ubicacion: ''
+    ubicacion: '',
+    concentracion: '',
+    registro_sanitario: '',
+    forma_farmaceutica: ''
   });
 
   const userRole = Number(user.role_id);
@@ -78,8 +80,10 @@ const Inventory: React.FC<InventoryProps> = ({ user, setView }) => {
         precio: 0, 
         precio_unidad: 0, 
         unidades_por_caja: 1, 
-        descripcion: '',
-        ubicacion: ''
+        ubicacion: '',
+        concentracion: '',
+        registro_sanitario: '',
+        forma_farmaceutica: ''
       });
     }
     setShowModal(true);
@@ -96,11 +100,13 @@ const Inventory: React.FC<InventoryProps> = ({ user, setView }) => {
         ...formData,
         nombre: formData.nombre?.trim().toUpperCase(),
         laboratorio: formData.laboratorio?.trim().toUpperCase(),
-        descripcion: formData.descripcion?.trim(),
         ubicacion: formData.ubicacion?.trim().toUpperCase(),
         precio: isSimple ? 0 : (Number(formData.precio) || 0), 
         precio_unidad: Number(formData.precio_unidad) || 0,
-        unidades_por_caja: isSimple ? 1 : (Number(formData.unidades_por_caja) || 1)
+        unidades_por_caja: isSimple ? 1 : (Number(formData.unidades_por_caja) || 1),
+        concentracion: formData.concentracion?.trim().toUpperCase(),
+        forma_farmaceutica: formData.forma_farmaceutica?.trim().toUpperCase(),
+        registro_sanitario: formData.registro_sanitario?.trim().toUpperCase()
       };
 
       if (!canEditPrices && formData.id) {
@@ -279,14 +285,14 @@ const Inventory: React.FC<InventoryProps> = ({ user, setView }) => {
                         <p className="font-black text-slate-900 text-xs uppercase">{p.nombre}</p>
                         <p className="text-[8px] text-slate-300 font-bold mt-1 bg-slate-100 px-2 py-0.5 rounded w-fit">{p.codigo_barras || 'Sin Código'}</p>
                       </td>
-                      <td className="px-8 py-6">
-                        <p className="text-[9px] text-indigo-500 font-black uppercase tracking-wider mb-1">{p.laboratorio || 'GENÉRICO'}</p>
-                        {p.descripcion ? (
-                          <p className="text-[9px] text-slate-500 font-medium italic line-clamp-2 max-w-[180px] leading-tight mb-1">{p.descripcion}</p>
-                        ) : (
-                          <span className="text-[8px] text-slate-300 italic block mb-1">Sin notas</span>
-                        )}
-                        <p className="text-[8px] text-slate-400 font-bold uppercase flex items-center gap-1">
+                      <td className="px-8 py-6 max-w-xs">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-1">
+                            <p className="text-[9px] text-indigo-500 font-black uppercase tracking-wider">{p.laboratorio || 'GENÉRICO'}</p>
+                            {p.forma_farmaceutica && <span className="text-[9px] font-bold text-slate-600">| {p.forma_farmaceutica}</span>}
+                            {p.concentracion && <span className="text-[9px] font-bold text-slate-600">| {p.concentracion}</span>}
+                        </div>
+                         {p.registro_sanitario && <p className="text-[8px] text-slate-400 font-mono mt-1">REG. SAN: {p.registro_sanitario}</p>}
+                        <p className="text-[8px] text-slate-400 font-bold uppercase flex items-center gap-1 mt-1">
                           <span className="w-1.5 h-1.5 bg-slate-300 rounded-full"></span>
                           {p.ubicacion || 'General'}
                         </p>
@@ -381,10 +387,21 @@ const Inventory: React.FC<InventoryProps> = ({ user, setView }) => {
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2 ml-1">Nombre Comercial *</label>
                     <input type="text" required className="w-full px-7 py-5 bg-white border-2 border-slate-100 rounded-[2rem] font-black text-sm uppercase focus:border-indigo-600 outline-none transition-all shadow-sm" value={formData.nombre} onChange={e => setFormData({...formData, nombre: e.target.value})} placeholder="EJ: ACETAMINOFEN 500MG" />
                   </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:col-span-2">
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2 ml-1">Concentración</label>
+                      <input type="text" className="w-full px-7 py-4 bg-white border-2 border-slate-100 rounded-2xl font-bold text-xs uppercase focus:border-indigo-600 outline-none transition-all shadow-sm" value={formData.concentracion} onChange={e => setFormData({...formData, concentracion: e.target.value.toUpperCase()})} placeholder="500MG, 1G/100ML..." />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2 ml-1">Forma Farmacéutica</label>
+                      <input type="text" className="w-full px-7 py-4 bg-white border-2 border-slate-100 rounded-2xl font-bold text-xs uppercase focus:border-indigo-600 outline-none transition-all shadow-sm" value={formData.forma_farmaceutica} onChange={e => setFormData({...formData, forma_farmaceutica: e.target.value.toUpperCase()})} placeholder="TABLETA, JARABE..." />
+                    </div>
+                  </div>
 
                   <div className="md:col-span-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2 ml-1">Descripción / Notas</label>
-                    <textarea className="w-full px-7 py-4 bg-white border-2 border-slate-100 rounded-[2rem] font-bold text-xs uppercase focus:border-indigo-600 outline-none transition-all shadow-sm min-h-[80px] resize-none" value={formData.descripcion} onChange={e => setFormData({...formData, descripcion: e.target.value})} placeholder="Ej: Contraindicaciones, dosis recomendada..." />
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2 ml-1">Registro Sanitario (INVIMA)</label>
+                      <input type="text" className="w-full px-7 py-4 bg-white border-2 border-slate-100 rounded-2xl font-bold text-xs uppercase focus:border-indigo-600 outline-none transition-all shadow-sm" value={formData.registro_sanitario} onChange={e => setFormData({...formData, registro_sanitario: e.target.value.toUpperCase()})} placeholder="INVIMA 202X-M-00..." />
                   </div>
                   
                   <div className={`p-8 bg-white rounded-[3rem] border border-slate-100 md:col-span-2 grid grid-cols-1 ${managementMode === 'box' ? 'md:grid-cols-3' : 'md:grid-cols-1'} gap-8 transition-all shadow-inner`}>

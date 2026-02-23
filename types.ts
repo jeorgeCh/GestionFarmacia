@@ -50,7 +50,6 @@ export interface Producto {
   codigo_barras: string;
   nombre: string;
   tipo: 'producto' | 'pastillas';
-  descripcion?: string;
   laboratorio?: string;
   precio: number; 
   precio_unidad: number; 
@@ -61,6 +60,9 @@ export interface Producto {
   fecha_vencimiento?: string;
   created_at: string;
   descuentos?: Descuento[];
+  concentracion?: string;
+  registro_sanitario?: string;
+  forma_farmaceutica?: string;
 }
 
 export interface Proveedor {
