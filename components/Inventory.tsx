@@ -127,7 +127,8 @@ const Inventory: React.FC<InventoryProps> = ({ user, setView }) => {
         });
 
       } else {
-        const { error } = await supabase.from('productos').insert([{ ...payload, stock: 0 }]);
+        const { id, ...insertPayload } = payload;
+        const { error } = await supabase.from('productos').insert([{ ...insertPayload, stock: 0 }]);
         if (error) throw error;
 
         await supabase.from('audit_logs').insert({
