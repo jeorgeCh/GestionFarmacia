@@ -380,8 +380,8 @@ const Inventory: React.FC<InventoryProps> = ({ user, setView }) => {
                   </div>
 
                   <div className="md:col-span-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2 ml-1">Código de Barras *</label>
-                    <input type="text" required className="w-full px-7 py-4 bg-white border-2 border-slate-100 rounded-2xl font-bold text-sm focus:border-indigo-600 outline-none transition-all shadow-sm" value={formData.codigo_barras} onChange={e => setFormData({...formData, codigo_barras: e.target.value})} placeholder="Escanee o asigne un código único" />
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2 ml-1">Código de Barras</label>
+                    <input type="text" className="w-full px-7 py-4 bg-white border-2 border-slate-100 rounded-2xl font-bold text-sm focus:border-indigo-600 outline-none transition-all shadow-sm" value={formData.codigo_barras} onChange={e => setFormData({...formData, codigo_barras: e.target.value})} placeholder="Escanee o asigne un código único" />
                   </div>
 
                   <div className="md:col-span-2">
@@ -409,18 +409,18 @@ const Inventory: React.FC<InventoryProps> = ({ user, setView }) => {
                     {managementMode === 'box' && (
                       <>
                         <div className="animate-in slide-in-from-left-2">
-                          <label className="text-[9px] font-black text-slate-400 uppercase block mb-1 tracking-widest">Unid. x Caja *</label>
-                          <input disabled={!canEditPrices && !!formData.id} type="number" min="2" required className="w-full px-6 py-5 bg-slate-50 rounded-2xl font-black text-2xl outline-none focus:bg-white border-2 border-transparent focus:border-indigo-100 disabled:bg-slate-200 disabled:text-slate-400" value={formData.unidades_por_caja} onChange={e => setFormData({...formData, unidades_por_caja: Number(e.target.value)})} />
+                          <label className="text-[9px] font-black text-slate-400 uppercase block mb-1 tracking-widest">Unid. x Caja</label>
+                          <input disabled={!canEditPrices && !!formData.id} type="number" min="2" className="w-full px-6 py-5 bg-slate-50 rounded-2xl font-black text-2xl outline-none focus:bg-white border-2 border-transparent focus:border-indigo-100 disabled:bg-slate-200 disabled:text-slate-400" value={formData.unidades_por_caja} onChange={e => setFormData({...formData, unidades_por_caja: Number(e.target.value)})} />
                         </div>
                         <div className="animate-in slide-in-from-bottom-2">
-                          <label className="text-[9px] font-black text-slate-400 uppercase block mb-1 tracking-widest">PVP Caja ($) *</label>
-                          <input disabled={!canEditPrices && !!formData.id} type="number" step="0.01" required className="w-full px-6 py-5 bg-slate-50 rounded-2xl font-black text-2xl outline-none focus:bg-white border-2 border-transparent focus:border-indigo-100 disabled:bg-slate-200 disabled:text-slate-400" value={formData.precio} onChange={e => setFormData({...formData, precio: Number(e.target.value)})} placeholder="0.00" />
+                          <label className="text-[9px] font-black text-slate-400 uppercase block mb-1 tracking-widest">PVP Caja ($)</label>
+                          <input disabled={!canEditPrices && !!formData.id} type="number" step="0.01" className="w-full px-6 py-5 bg-slate-50 rounded-2xl font-black text-2xl outline-none focus:bg-white border-2 border-transparent focus:border-indigo-100 disabled:bg-slate-200 disabled:text-slate-400" value={formData.precio} onChange={e => setFormData({...formData, precio: Number(e.target.value)})} placeholder="0.00" />
                         </div>
                       </>
                     )}
                     <div className="animate-in zoom-in-95">
-                      <label className="text-[9px] font-black text-indigo-500 uppercase block mb-1 tracking-widest">PVP Unidad ($) *</label>
-                      <input disabled={!canEditPrices && !!formData.id} type="number" step="0.01" required className="w-full px-6 py-5 bg-indigo-50/20 rounded-2xl font-black text-2xl text-indigo-600 outline-none focus:border-white border-2 border-indigo-100 focus:border-indigo-300 disabled:bg-slate-200 disabled:text-slate-400" value={formData.precio_unidad} onChange={e => setFormData({...formData, precio_unidad: Number(e.target.value)})} placeholder="0.00" />
+                      <label className="text-[9px] font-black text-indigo-500 uppercase block mb-1 tracking-widest">PVP Unidad ($)</label>
+                      <input disabled={!canEditPrices && !!formData.id} type="number" step="0.01" className="w-full px-6 py-5 bg-indigo-50/20 rounded-2xl font-black text-2xl text-indigo-600 outline-none focus:border-white border-2 border-indigo-100 focus:border-indigo-300 disabled:bg-slate-200 disabled:text-slate-400" value={formData.precio_unidad} onChange={e => setFormData({...formData, precio_unidad: Number(e.target.value)})} placeholder="0.00" />
                     </div>
                   </div>
 
