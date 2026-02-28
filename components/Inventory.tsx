@@ -8,6 +8,16 @@ interface InventoryProps {
   setView?: (view: any) => void; 
 }
 
+const formasFarmaceuticas = [
+  "TABLETAS",
+  "CÁPSULAS",
+  "JARABE",
+  "GOTAS",
+  "CREMA",
+  "INYECTABLE",
+  "SOBRES",
+];
+
 const Inventory: React.FC<InventoryProps> = ({ user, setView }) => {
   const [allProducts, setAllProducts] = useState<Producto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -396,7 +406,16 @@ const Inventory: React.FC<InventoryProps> = ({ user, setView }) => {
                     </div>
                     <div>
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2 ml-1">Forma Farmacéutica</label>
-                      <input type="text" className="w-full px-7 py-4 bg-white border-2 border-slate-100 rounded-2xl font-bold text-xs uppercase focus:border-indigo-600 outline-none transition-all shadow-sm" value={formData.forma_farmaceutica} onChange={e => setFormData({...formData, forma_farmaceutica: e.target.value.toUpperCase()})} placeholder="TABLETA, JARABE..." />
+                      <input 
+                        type="text" 
+                        list="formas-farmaceuticas"
+                        className="w-full px-7 py-4 bg-white border-2 border-slate-100 rounded-2xl font-bold text-xs uppercase focus:border-indigo-600 outline-none transition-all shadow-sm" 
+                        value={formData.forma_farmaceutica} 
+                        onChange={e => setFormData({...formData, forma_farmaceutica: e.target.value.toUpperCase()})} 
+                        placeholder="TABLETA, JARABE..." />
+                      <datalist id="formas-farmaceuticas">
+                        {formasFarmaceuticas.map(forma => <option key={forma} value={forma} />)}
+                      </datalist>
                     </div>
                   </div>
 
