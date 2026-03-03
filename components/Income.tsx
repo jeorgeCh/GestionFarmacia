@@ -25,7 +25,7 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
     codigo_barras: '',
     cantidad_cajas: 1, 
     unidades_por_caja: 1,
-    costo_por_caja: 0,
+    costo_total_compra: 0,
     lote: '',
     fecha_vencimiento: ''
   });
@@ -59,9 +59,8 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
   }, [selectedProduct]);
 
   const totalUnidadesEntrantes = formData.cantidad_cajas * formData.unidades_por_caja;
-  const costoTotalFactura = formData.cantidad_cajas * formData.costo_por_caja;
-  const costoUnitarioCompra = formData.unidades_por_caja > 0 
-    ? (formData.costo_por_caja / formData.unidades_por_caja) 
+  const costoUnitarioCompra = totalUnidadesEntrantes > 0 
+    ? (formData.costo_total_compra / totalUnidadesEntrantes) 
     : 0;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -76,7 +75,7 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
         proveedor_id: Number(formData.proveedor_id),
         cantidad: totalUnidadesEntrantes,
         costo_unitario: costoUnitarioCompra,
-        total: costoTotalFactura,
+        total: formData.costo_total_compra,
         lote: formData.lote.toUpperCase(),
         fecha_vencimiento: formData.fecha_vencimiento || null
       });
@@ -106,7 +105,7 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
         codigo_barras: '',
         cantidad_cajas: 1, 
         unidades_por_caja: 1, 
-        costo_por_caja: 0, 
+        costo_total_compra: 0, 
         lote: '', 
         fecha_vencimiento: '' 
       });
@@ -212,8 +211,8 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
                     </div>
                     
                     <div className="space-y-2">
-                      <label className="text-[10px] font-black text-emerald-600 uppercase tracking-widest block ml-1">Costo por Caja ($) *</label>
-                      <input type="number" required step="0.01" className="w-full px-6 py-5 bg-white border-2 border-emerald-100 rounded-2xl font-black text-2xl text-emerald-600 outline-none focus:border-emerald-500 shadow-sm" value={formData.costo_por_caja} onChange={e => setFormData({...formData, costo_por_caja: Number(e.target.value)})} placeholder="0.00" />
+                      <label className="text-[10px] font-black text-emerald-600 uppercase tracking-widest block ml-1">Costo Total Compra ($) *</label>
+                      <input type="number" required step="0.01" className="w-full px-6 py-5 bg-white border-2 border-emerald-100 rounded-2xl font-black text-2xl text-emerald-600 outline-none focus:border-emerald-500 shadow-sm" value={formData.costo_total_compra} onChange={e => setFormData({...formData, costo_total_compra: Number(e.target.value)})} placeholder="0.00" />
                     </div>
                  </div>
               </div>

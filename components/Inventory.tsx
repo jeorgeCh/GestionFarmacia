@@ -8,26 +8,17 @@ interface InventoryProps {
   setView?: (view: any) => void; 
 }
 
-const formasFarmaceuticas = [
-  "TABLETAS",
-  "CÁPSULAS",
-  "JARABE",
-  "GOTAS",
-  "CREMA",
-  "INYECTABLE",
-  "SOBRES",
-];
-
 const Inventory: React.FC<InventoryProps> = ({ user, setView }) => {
   const [allProducts, setAllProducts] = useState<Producto[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterType, setFilterType] = useState('nombre'); // 'nombre', 'vencimiento', 'stock'
+  const [filterType, setFilterType] = useState('nombre'); // 'nombre', 'vencimiento', 'stock', 'stock_desc'
   const [showModal, setShowModal] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   
   const [managementMode, setManagementMode] = useState<'simple' | 'box'>('box');
+  const [originalStock, setOriginalStock] = useState<number | undefined>(undefined);
 
   const [formData, setFormData] = useState<Partial<Producto>>({
     id: undefined,
@@ -38,6 +29,7 @@ const Inventory: React.FC<InventoryProps> = ({ user, setView }) => {
     precio: 0, 
     precio_unidad: 0, 
     unidades_por_caja: 1, 
+    stock: 0,
     ubicacion: '',
     concentracion: '',
     registro_sanitario: '',
@@ -50,7 +42,9 @@ const Inventory: React.FC<InventoryProps> = ({ user, setView }) => {
   const isSeller = userRole === 2;
 
   const canManageProducts = isAdmin || isSuperUser || isSeller;
-  const canEditPrices = isAdmin || isSuperUser;
+  const canEditPrices = isAdmin || isSuperUser || isSeller;
+  const canEditStock = isAdmin || isSuperUser;
+  const canDeleteProducts = isAdmin || isSuperUser;
 
   useEffect(() => { 
     fetchProducts(); 
@@ -79,6 +73,7 @@ const Inventory: React.FC<InventoryProps> = ({ user, setView }) => {
       const isSimple = (p.unidades_por_caja || 1) <= 1;
       setManagementMode(isSimple ? 'simple' : 'box');
       setFormData(p);
+      setOriginalStock(p.stock);
     } else {
       setManagementMode('box');
       setFormData({ 
@@ -90,11 +85,13 @@ const Inventory: React.FC<InventoryProps> = ({ user, setView }) => {
         precio: 0, 
         precio_unidad: 0, 
         unidades_por_caja: 1, 
+        stock: 0,
         ubicacion: '',
         concentracion: '',
         registro_sanitario: '',
         forma_farmaceutica: ''
       });
+      setOriginalStock(undefined);
     }
     setShowModal(true);
   };
@@ -114,6 +111,7 @@ const Inventory: React.FC<InventoryProps> = ({ user, setView }) => {
         precio: isSimple ? 0 : (Number(formData.precio) || 0), 
         precio_unidad: Number(formData.precio_unidad) || 0,
         unidades_por_caja: isSimple ? 1 : (Number(formData.unidades_por_caja) || 1),
+        stock: Number(formData.stock) || 0,
         concentracion: formData.concentracion?.trim().toUpperCase(),
         forma_farmaceutica: formData.forma_farmaceutica?.trim().toUpperCase(),
         registro_sanitario: formData.registro_sanitario?.trim().toUpperCase()
@@ -124,21 +122,37 @@ const Inventory: React.FC<InventoryProps> = ({ user, setView }) => {
         delete payload.precio_unidad;
         delete payload.unidades_por_caja;
       }
+      
+      if (!canEditStock) {
+        delete payload.stock;
+      }
 
       if (formData.id) {
         const { error } = await supabase.from('productos').update(payload).eq('id', formData.id);
         if (error) throw error;
         
-        await supabase.from('audit_logs').insert({
-            usuario_id: user.id,
-            accion: 'EDICION_PRODUCTO',
-            modulo: 'INVENTARIO',
-            detalles: `Actualizó: ${payload.nombre}. PVP U: $${payload.precio_unidad}`
-        });
+        let detalles = `Actualizó: ${payload.nombre}.`;
+        if (canEditStock && payload.stock !== originalStock) {
+           detalles += ` Stock cambiado de ${originalStock} a ${payload.stock}.`;
+           await supabase.from('audit_logs').insert({
+              usuario_id: user.id,
+              accion: 'AJUSTE_STOCK_MANUAL',
+              modulo: 'INVENTARIO',
+              detalles
+           });
+        } else {
+           detalles += ` PVP U: $${payload.precio_unidad}`;
+           await supabase.from('audit_logs').insert({
+              usuario_id: user.id,
+              accion: 'EDICION_PRODUCTO',
+              modulo: 'INVENTARIO',
+              detalles
+           });
+        }
 
       } else {
         const { id, ...insertPayload } = payload;
-        const { error } = await supabase.from('productos').insert([{ ...insertPayload, stock: 0 }]);
+        const { error } = await supabase.from('productos').insert([{ ...insertPayload, stock: canEditStock ? payload.stock : 0 }]);
         if (error) throw error;
 
         await supabase.from('audit_logs').insert({
@@ -155,6 +169,54 @@ const Inventory: React.FC<InventoryProps> = ({ user, setView }) => {
       setSaveError(err.message || "Error al guardar producto.");
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleDelete = async (product: Producto) => {
+    if (!canDeleteProducts) return;
+
+    const { id, nombre, stock } = product;
+
+    let confirmationMessage = `¿Estás completamente seguro de que quieres eliminar el producto '${nombre}'?`;
+    if (stock && stock > 0) {
+        confirmationMessage += `\n\n⚠️ ADVERTENCIA: Este producto tiene ${stock} unidades en stock.`;
+    }
+    confirmationMessage += "\n\nEsta acción es irreversible y eliminará el producto de la base de datos permanentemente.";
+
+    if (!window.confirm(confirmationMessage)) {
+        return;
+    }
+    
+    const finalConfirmation = prompt(`Para confirmar la eliminación, escribe el nombre del producto: "${nombre}"`);
+    if (finalConfirmation !== nombre) {
+        alert("La confirmación no coincide. La eliminación ha sido cancelada.");
+        return;
+    }
+
+    try {
+      const { error } = await supabase.from('productos').delete().eq('id', id);
+      if (error) {
+        if (error.code === '23503') { // foreign_key_violation
+            alert(`Error: No se puede eliminar '${nombre}' porque está siendo referenciado en otros registros (ventas, ingresos, etc.).\n\nPara poder eliminarlo, primero deben eliminarse sus registros asociados, o considere simplemente ajustar su stock a 0.`);
+        } else {
+            throw error;
+        }
+        return;
+      }
+
+      await supabase.from('audit_logs').insert({
+          usuario_id: user.id,
+          accion: 'ELIMINACION_PRODUCTO',
+          modulo: 'INVENTARIO',
+          detalles: `Eliminó permanentemente el producto: ${nombre} (ID: ${id})`
+      });
+
+      alert(`Producto '${nombre}' eliminado con éxito.`);
+      fetchProducts(); // Refresh list
+
+    } catch (err: any) {
+      console.error("Error al eliminar producto:", err);
+      alert(`Ocurrió un error inesperado al eliminar el producto: ${err.message}`);
     }
   };
 
@@ -205,6 +267,8 @@ const Inventory: React.FC<InventoryProps> = ({ user, setView }) => {
         });
     } else if (filterType === 'stock') {
         products.sort((a, b) => (a.stock || 0) - (b.stock || 0));
+    } else if (filterType === 'stock_desc') {
+        products.sort((a, b) => (b.stock || 0) - (a.stock || 0));
     } else { // 'nombre'
         products.sort((a, b) => a.nombre.localeCompare(b.nombre));
     }
@@ -263,6 +327,7 @@ const Inventory: React.FC<InventoryProps> = ({ user, setView }) => {
             <button onClick={() => setFilterType('nombre')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${filterType === 'nombre' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>A-Z</button>
             <button onClick={() => setFilterType('vencimiento')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${filterType === 'vencimiento' ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>Próximos a Vencer</button>
             <button onClick={() => setFilterType('stock')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${filterType === 'stock' ? 'bg-rose-500 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>Por Agotarse</button>
+            <button onClick={() => setFilterType('stock_desc')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${filterType === 'stock_desc' ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>Más Stock</button>
         </div>
       </div>
 
@@ -326,11 +391,18 @@ const Inventory: React.FC<InventoryProps> = ({ user, setView }) => {
                         ${(p.precio_unidad || 0).toLocaleString()}
                       </td>
                       <td className="px-10 py-6 text-center">
-                        {canManageProducts && (
-                            <button onClick={() => handleOpenModal(p)} className="p-3 bg-slate-100 text-slate-400 hover:text-indigo-600 rounded-xl hover:bg-white border border-transparent hover:border-slate-100 transition-all">
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
-                            </button>
-                        )}
+                        <div className="flex items-center justify-center gap-2">
+                            {canManageProducts && (
+                                <button onClick={() => handleOpenModal(p)} className="p-3 bg-slate-100 text-slate-400 hover:text-indigo-600 rounded-xl hover:bg-white border border-transparent hover:border-slate-100 transition-all" title="Editar Producto">
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                                </button>
+                            )}
+                            {canDeleteProducts && (
+                                <button onClick={() => handleDelete(p)} className="p-3 bg-slate-100 text-rose-400 hover:text-white hover:bg-rose-500 rounded-xl border border-transparent transition-all" title="Eliminar Producto">
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                </button>
+                            )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -345,7 +417,7 @@ const Inventory: React.FC<InventoryProps> = ({ user, setView }) => {
 
       {showModal && (
         <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[150] p-4 animate-in fade-in">
-          <div className="bg-white rounded-[4rem] w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[95vh]">
+          <div className="bg-white rounded-[4rem] w-full max-w-3xl shadow-2xl overflow-hidden flex flex-col max-h-[95vh]">
             <div className="p-10 bg-slate-950 text-white flex justify-between items-center shrink-0">
               <div>
                 <h3 className="text-xl font-black uppercase tracking-tight leading-none">
@@ -366,27 +438,19 @@ const Inventory: React.FC<InventoryProps> = ({ user, setView }) => {
                     <div className="flex bg-white p-2 rounded-3xl border border-slate-100 shadow-sm relative overflow-hidden">
                        <button 
                         type="button" 
-                        disabled={!!formData.id}
                         onClick={() => setManagementMode('simple')}
-                        className={`flex-1 py-4 rounded-[1.5rem] font-black text-[10px] uppercase tracking-widest transition-all ${managementMode === 'simple' ? 'bg-indigo-600 text-white shadow-xl' : 'text-slate-400 hover:bg-slate-50'} ${formData.id ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        className={`flex-1 py-4 rounded-[1.5rem] font-black text-[10px] uppercase tracking-widest transition-all ${managementMode === 'simple' ? 'bg-indigo-600 text-white shadow-xl' : 'text-slate-400 hover:bg-slate-50'}`}
                        >
                          Solo Individual
                        </button>
                        <button 
                         type="button" 
-                        disabled={!!formData.id}
                         onClick={() => setManagementMode('box')}
-                        className={`flex-1 py-4 rounded-[1.5rem] font-black text-[10px] uppercase tracking-widest transition-all ${managementMode === 'box' ? 'bg-slate-900 text-white shadow-xl' : 'text-slate-400 hover:bg-slate-50'} ${formData.id ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        className={`flex-1 py-4 rounded-[1.5rem] font-black text-[10px] uppercase tracking-widest transition-all ${managementMode === 'box' ? 'bg-slate-900 text-white shadow-xl' : 'text-slate-400 hover:bg-slate-50'}`}
                        >
                          Caja + Individual
                        </button>
                     </div>
-                    {formData.id && (
-                      <p className="text-[8px] text-amber-500 font-black uppercase tracking-widest ml-2 bg-amber-50 p-2 rounded-lg border border-amber-100 flex items-center gap-2">
-                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-                         La modalidad de venta no puede cambiarse tras el registro inicial.
-                      </p>
-                    )}
                   </div>
 
                   <div className="md:col-span-2">
@@ -408,14 +472,10 @@ const Inventory: React.FC<InventoryProps> = ({ user, setView }) => {
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2 ml-1">Forma Farmacéutica</label>
                       <input 
                         type="text" 
-                        list="formas-farmaceuticas"
                         className="w-full px-7 py-4 bg-white border-2 border-slate-100 rounded-2xl font-bold text-xs uppercase focus:border-indigo-600 outline-none transition-all shadow-sm" 
                         value={formData.forma_farmaceutica} 
                         onChange={e => setFormData({...formData, forma_farmaceutica: e.target.value.toUpperCase()})} 
                         placeholder="TABLETA, JARABE..." />
-                      <datalist id="formas-farmaceuticas">
-                        {formasFarmaceuticas.map(forma => <option key={forma} value={forma} />)}
-                      </datalist>
                     </div>
                   </div>
 
@@ -429,17 +489,17 @@ const Inventory: React.FC<InventoryProps> = ({ user, setView }) => {
                       <>
                         <div className="animate-in slide-in-from-left-2">
                           <label className="text-[9px] font-black text-slate-400 uppercase block mb-1 tracking-widest">Unid. x Caja</label>
-                          <input disabled={!canEditPrices && !!formData.id} type="number" min="2" className="w-full px-6 py-5 bg-slate-50 rounded-2xl font-black text-2xl outline-none focus:bg-white border-2 border-transparent focus:border-indigo-100 disabled:bg-slate-200 disabled:text-slate-400" value={formData.unidades_por_caja} onChange={e => setFormData({...formData, unidades_por_caja: Number(e.target.value)})} />
+                          <input disabled={!canEditPrices} type="number" min="2" className="w-full px-6 py-5 bg-slate-50 rounded-2xl font-black text-2xl outline-none focus:bg-white border-2 border-transparent focus:border-indigo-100 disabled:bg-slate-200 disabled:text-slate-400" value={formData.unidades_por_caja} onChange={e => setFormData({...formData, unidades_por_caja: Number(e.target.value)})} />
                         </div>
                         <div className="animate-in slide-in-from-bottom-2">
                           <label className="text-[9px] font-black text-slate-400 uppercase block mb-1 tracking-widest">PVP Caja ($)</label>
-                          <input disabled={!canEditPrices && !!formData.id} type="number" step="0.01" className="w-full px-6 py-5 bg-slate-50 rounded-2xl font-black text-2xl outline-none focus:bg-white border-2 border-transparent focus:border-indigo-100 disabled:bg-slate-200 disabled:text-slate-400" value={formData.precio} onChange={e => setFormData({...formData, precio: Number(e.target.value)})} placeholder="0.00" />
+                          <input disabled={!canEditPrices} type="number" step="0.01" className="w-full px-6 py-5 bg-slate-50 rounded-2xl font-black text-2xl outline-none focus:bg-white border-2 border-transparent focus:border-indigo-100 disabled:bg-slate-200 disabled:text-slate-400" value={formData.precio} onChange={e => setFormData({...formData, precio: Number(e.target.value)})} placeholder="0.00" />
                         </div>
                       </>
                     )}
                     <div className="animate-in zoom-in-95">
                       <label className="text-[9px] font-black text-indigo-500 uppercase block mb-1 tracking-widest">PVP Unidad ($)</label>
-                      <input disabled={!canEditPrices && !!formData.id} type="number" step="0.01" className="w-full px-6 py-5 bg-indigo-50/20 rounded-2xl font-black text-2xl text-indigo-600 outline-none focus:border-white border-2 border-indigo-100 focus:border-indigo-300 disabled:bg-slate-200 disabled:text-slate-400" value={formData.precio_unidad} onChange={e => setFormData({...formData, precio_unidad: Number(e.target.value)})} placeholder="0.00" />
+                      <input disabled={!canEditPrices} type="number" step="0.01" className="w-full px-6 py-5 bg-indigo-50/20 rounded-2xl font-black text-2xl text-indigo-600 outline-none focus:border-white border-2 border-indigo-100 focus:border-indigo-300 disabled:bg-slate-200 disabled:text-slate-400" value={formData.precio_unidad} onChange={e => setFormData({...formData, precio_unidad: Number(e.target.value)})} placeholder="0.00" />
                     </div>
                   </div>
 
@@ -451,6 +511,24 @@ const Inventory: React.FC<InventoryProps> = ({ user, setView }) => {
                     <label className="text-[10px] font-black text-slate-400 uppercase block mb-1 tracking-widest ml-1">Ubicación</label>
                     <input type="text" className="w-full px-6 py-4 bg-white border-2 border-slate-100 rounded-2xl font-black text-xs uppercase shadow-sm outline-none focus:border-indigo-600" value={formData.ubicacion} onChange={e => setFormData({...formData, ubicacion: e.target.value})} placeholder="ESTANTE A-1" />
                   </div>
+
+                  {canEditStock && formData.id && (
+                    <div className="p-8 bg-amber-50 rounded-[3rem] border-2 border-amber-100 md:col-span-2 space-y-4">
+                      <label className="text-[10px] font-black text-amber-700 uppercase tracking-widest block ml-1">Ajuste Manual de Stock (Admin)</label>
+                      <div className="flex items-center gap-4">
+                        <input type="number" className="w-full px-6 py-5 bg-white rounded-2xl font-black text-3xl text-amber-700 outline-none focus:border-amber-500 border-2 border-transparent shadow-sm" value={formData.stock} onChange={e => setFormData({...formData, stock: Number(e.target.value)})} />
+                        <div className="text-center">
+                          <p className="text-[9px] font-black text-slate-400 uppercase">Stock Original</p>
+                          <p className="font-mono text-slate-500">{originalStock}</p>
+                        </div>
+                      </div>
+                       <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest ml-2 flex items-center gap-2">
+                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                         CUIDADO: Esta acción modifica directamente el inventario total.
+                      </p>
+                    </div>
+                  )}
+
                </div>
 
                {saveError && <p className="text-rose-500 text-[10px] font-black uppercase text-center bg-rose-50 py-4 rounded-2xl border border-rose-100 animate-bounce">{saveError}</p>}
