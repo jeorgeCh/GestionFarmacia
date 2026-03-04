@@ -85,21 +85,11 @@ app.post('/imprimir-ticket', async (req, res) => {
     printer.cut();
     //printer.openCashDrawer(); // Descomenta si tu impresora abre la caja registradora
 
-    // --- VISTA PREVIA EN CONSOLA ---
-    // En lugar de imprimir, mostraremos el buffer en la consola.
-    // Esto te permite ver cómo se verá la factura sin necesidad de una impresora física.
-    const buffer = await printer.getBuffer();
-    console.log("--- VISTA PREVIA DE FACTURA ---");
-    console.log(buffer.toString());
-    console.log("-------------------------------");
+    
+    // --- IMPRESIÓN REAL ---
+    await printer.execute();
 
-
-    // --- IMPRESIÓN REAL (COMENTADO) ---
-    // Cuando estés listo para imprimir de verdad, comenta la sección de "VISTA PREVIA"
-    // y descomenta la siguiente línea:
-    // await printer.execute();
-
-    res.status(200).send({ message: 'Vista previa de la factura generada en la consola del servidor.' });
+    res.status(200).send({ message: 'Ticket impreso correctamente.' });
 
   } catch (error) {
     console.error("Error al procesar el ticket:", error);

@@ -307,14 +307,13 @@ const POS: React.FC<POSProps> = ({ user }) => {
   const changeDue = (Number(cashReceived) || 0) - totalAmount;
 
   const printTicket = async (orderSummary: any) => {
-    // Ahora esta función enviará el objeto de resumen completo
     try {
       const response = await fetch('http://localhost:4000/imprimir-ticket', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(orderSummary), // Envía el resumen completo
+        body: JSON.stringify(orderSummary),
       });
       const result = await response.json();
       if (!response.ok) {
@@ -374,8 +373,9 @@ const POS: React.FC<POSProps> = ({ user }) => {
       });
 
       const orderSummary = { 
-        transactionId: transactionId.split('-')[0].toUpperCase(), 
-        items: cart.map(item => ({ // Mapeamos para enviar solo lo necesario
+        transactionId: transactionId.split('-')[0].toUpperCase(),
+        sellerName: user.username || 'N/A',
+        items: cart.map(item => ({ 
           name: `${item.product.nombre}`,
           quantity: item.cantidad,
           price: item.finalPrice,
