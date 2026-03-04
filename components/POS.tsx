@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
 import { Producto, Usuario } from '../types';
 
+// (El resto del componente ProductCard sigue igual...)
 interface ProductCardProps {
   product: Producto;
   saleMode: 'caja' | 'unidad';
@@ -110,7 +111,6 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, saleMode, onAddToCar
     </div>
   );
 };
-
 
 interface POSProps {
   user: Usuario;
@@ -307,31 +307,21 @@ const POS: React.FC<POSProps> = ({ user }) => {
   const changeDue = (Number(cashReceived) || 0) - totalAmount;
 
   const printTicket = async (orderSummary: any) => {
-    const ticketItems = orderSummary.items.map((item: CartItem) => ({
-      name: `${item.product.nombre} ${item.saleMode === 'caja' ? `(x${item.unitsPerBox})` : ''}`,
-      price: item.finalPrice,
-      quantity: item.cantidad,
-    }));
-
-    const ticketData = {
-      items: ticketItems,
-      total: orderSummary.total,
-    };
-
+    // Ahora esta función enviará el objeto de resumen completo
     try {
       const response = await fetch('http://localhost:4000/imprimir-ticket', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(ticketData),
+        body: JSON.stringify(orderSummary), // Envía el resumen completo
       });
       const result = await response.json();
       if (!response.ok) {
         console.error('Error al imprimir ticket:', result.message);
         alert(`La venta se completó, pero falló la impresión: ${result.message}`);
       } else {
-        console.log('Ticket impreso con éxito.');
+        console.log('Respuesta del servicio de impresión:', result.message);
       }
     } catch (error) {
       console.error('Error de conexión con servicio de impresión:', error);
@@ -385,22 +375,25 @@ const POS: React.FC<POSProps> = ({ user }) => {
 
       const orderSummary = { 
         transactionId: transactionId.split('-')[0].toUpperCase(), 
-        items: [...cart], 
+        items: cart.map(item => ({ // Mapeamos para enviar solo lo necesario
+          name: `${item.product.nombre}`,
+          quantity: item.cantidad,
+          price: item.finalPrice,
+          total: item.finalPrice * item.cantidad,
+          saleMode: item.saleMode,
+        })),
         total: totalAmount, 
         paymentMethod, 
         cashReceived: paymentMethod === 'efectivo' ? Number(cashReceived) : totalAmount, 
         change: paymentMethod === 'efectivo' ? changeDue : 0, 
-        date: new Date().toLocaleString() 
+        date: new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' }) 
       };
 
       setShowOrderSummary(orderSummary);
-      
-      // Llamada a la función de impresión
-      await printTicket(orderSummary);
-      
       setCart([]);
       setCashReceived('');
       fetchData();
+
     } catch (err: any) {
       console.error("Error en venta:", err);
       alert("Error al procesar la venta.");
@@ -423,6 +416,7 @@ const POS: React.FC<POSProps> = ({ user }) => {
 
   return (
     <div className="relative lg:h-[calc(100vh-140px)] h-auto animate-slide-up">
+       {/* El resto del JSX sigue igual... */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-full">
         <div className="lg:col-span-7 flex flex-col space-y-4 lg:h-full min-h-[500px]">
           <div className="relative group shrink-0">
@@ -547,21 +541,45 @@ const POS: React.FC<POSProps> = ({ user }) => {
         <div className="fixed inset-0 z-[200] bg-slate-950/98 backdrop-blur-2xl flex items-center justify-center p-4 animate-in fade-in">
           <div className="bg-white w-full max-w-2xl rounded-[3rem] overflow-hidden shadow-2xl animate-in zoom-in-95 flex flex-col p-8 lg:p-12 max-h-[90vh]">
             <div className="text-center mb-8 shrink-0">
-              <div className="w-16 h-16 bg-emerald-500 rounded-2xl flex items-center justify-center text-white text-3xl mb-4 mx-auto shadow-xl">✓</div>
-              <h2 className="text-3xl font-black uppercase text-slate-900">Venta Exitosa</h2>
+              <h2 className="text-3xl font-black uppercase text-slate-900">Resumen de Venta</h2>
               <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.4em] mt-2">#{showOrderSummary.transactionId}</p>
             </div>
             <div className="flex-1 overflow-y-auto space-y-3 mb-8 pr-2 custom-scrollbar bg-slate-50 p-4 rounded-2xl border border-slate-100">
               {showOrderSummary.items.map((item: any, i: number) => (
                 <div key={i} className="flex justify-between items-center py-2 border-b border-slate-200/50 last:border-0">
-                   <div><p className="font-black text-slate-900 text-[11px] uppercase">{item.product.nombre}</p><p className="text-[9px] text-slate-500 font-bold uppercase">{item.cantidad} {item.saleMode}(s)</p></div>
-                   <p className="font-black text-slate-900 text-base tracking-tighter">${(item.cantidad * item.finalPrice).toLocaleString()}</p>
+                   <div><p className="font-black text-slate-900 text-[11px] uppercase">{item.name}</p><p className="text-[9px] text-slate-500 font-bold uppercase">{item.quantity} {item.saleMode}(s)</p></div>
+                   <p className="font-black text-slate-900 text-base tracking-tighter">${item.total.toLocaleString()}</p>
                 </div>
               ))}
             </div>
-            <div className="shrink-0 space-y-6">
-              <div className="flex justify-between items-end px-2"><div><span className="text-[10px] font-black text-slate-400 uppercase">Total Cobrado</span><p className="text-5xl font-black text-slate-900 tracking-tighter leading-none mt-1">${showOrderSummary.total.toLocaleString()}</p></div>{showOrderSummary.paymentMethod === 'efectivo' && (<div><span className="text-[10px] font-black text-emerald-600 uppercase">Cambio</span><p className="text-3xl font-black text-emerald-600 tracking-tighter">${showOrderSummary.change.toLocaleString()}</p></div>)}</div>
-              <button onClick={() => setShowOrderSummary(null)} className="w-full py-5 bg-slate-950 text-white rounded-[2rem] font-black text-[11px] uppercase shadow-2xl hover:bg-emerald-600 transition-all active:scale-95">Nueva Venta</button>
+            <div className="shrink-0 space-y-4">
+              <div className="flex justify-between items-end px-2 mb-4">
+                <div>
+                  <span className="text-[10px] font-black text-slate-400 uppercase">Total Venta</span>
+                  <p className="text-5xl font-black text-slate-900 tracking-tighter leading-none mt-1">${showOrderSummary.total.toLocaleString()}</p>
+                </div>
+                {showOrderSummary.paymentMethod === 'efectivo' && (
+                  <div>
+                    <span className="text-[10px] font-black text-emerald-600 uppercase">Cambio</span>
+                    <p className="text-3xl font-black text-emerald-600 tracking-tighter">${showOrderSummary.change.toLocaleString()}</p>
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={async () => {
+                  await printTicket(showOrderSummary);
+                  setShowOrderSummary(null);
+                }}
+                className="w-full py-4 bg-slate-900 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-emerald-600 transition-all active:scale-95"
+              >
+                Imprimir y Cerrar
+              </button>
+              <button
+                onClick={() => setShowOrderSummary(null)}
+                className="w-full py-3 bg-slate-100 text-slate-600 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all"
+              >
+                Cerrar sin Imprimir
+              </button>
             </div>
           </div>
         </div>
