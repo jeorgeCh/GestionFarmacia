@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
 import { Producto, Usuario } from '../types';
+import StockReport from './StockReport'; // Import the new component
 
 interface InventoryProps { 
   user: Usuario; 
@@ -12,8 +13,9 @@ const Inventory: React.FC<InventoryProps> = ({ user, setView }) => {
   const [allProducts, setAllProducts] = useState<Producto[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterType, setFilterType] = useState('nombre'); // 'nombre', 'vencimiento', 'stock', 'stock_desc'
+  const [filterType, setFilterType] = useState('nombre');
   const [showModal, setShowModal] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false); // State for the report modal
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   
@@ -316,11 +318,16 @@ const Inventory: React.FC<InventoryProps> = ({ user, setView }) => {
               <input type="text" className="w-full pl-14 pr-6 py-4 bg-slate-50 border-2 border-transparent rounded-2xl outline-none font-bold text-sm focus:bg-white focus:border-indigo-600" placeholder="Buscar medicamento, lab o código..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
               <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg></div>
             </div>
-            {canManageProducts && (
-              <button onClick={() => handleOpenModal()} className="w-full lg:w-auto bg-slate-950 text-white px-10 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl hover:bg-emerald-600 transition-all">
-                + Nuevo Producto
-              </button>
-            )}
+            <div className="flex items-center gap-2 w-full lg:w-auto">
+                {canManageProducts && (
+                  <button onClick={() => handleOpenModal()} className="w-full lg:w-auto bg-slate-950 text-white px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl hover:bg-emerald-600 transition-all">
+                    + Nuevo Producto
+                  </button>
+                )}
+                <button onClick={() => setShowReportModal(true)} className="w-full lg:w-auto bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl hover:bg-indigo-500 transition-all">
+                    Generar Reporte
+                </button>
+            </div>
         </div>
         <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 border-t border-slate-100 pt-4">
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mr-2">Filtros:</p>
@@ -542,6 +549,13 @@ const Inventory: React.FC<InventoryProps> = ({ user, setView }) => {
             </form>
           </div>
         </div>
+      )}
+
+      {showReportModal && (
+        <StockReport 
+          products={allProducts} 
+          onClose={() => setShowReportModal(false)} 
+        />
       )}
     </div>
   );

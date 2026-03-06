@@ -17,24 +17,28 @@ const SuperAdmin: React.FC = () => {
   const fetchProfitability = async () => {
     setLoadingProfit(true);
     try {
-      const { data: productos } = await supabase.from('productos').select('*');
-      const { data: ingresos } = await supabase.from('ingresos').select('*').order('fecha', { ascending: false });
+      // Select only the columns that exist in the database
+      const { data: productos } = await supabase.from('productos').select('id, nombre, laboratorio, precio, precio_unidad, unidades_por_caja');
+      const { data: ingresos } = await supabase.from('ingresos').select('producto_id, costo_unitario, fecha').order('fecha', { ascending: false });
       
       if (productos) {
         const stats = productos.map(p => {
           const lastIncome = ingresos?.find(i => i.producto_id === p.id);
           const costoUnitario = lastIncome ? Number(lastIncome.costo_unitario) : 0;
-          const precioVenta = p.precio_unidad > 0 ? p.precio_unidad : (p.precio / (p.unidades_por_caja || 1));
+          
+          // Corrected logic based on the current database schema
+          const precioVenta = (p.precio_unidad && p.precio_unidad > 0) ? p.precio_unidad : ((p.precio || 0) / (p.unidades_por_caja || 1));
           const gananciaUnitaria = precioVenta - costoUnitario;
-          const margen = costoUnitario > 0 ? (gananciaUnitaria / costoUnitario) * 100 : 100;
+          const margen = costoUnitario > 0 ? (gananciaUnitaria / costoUnitario) * 100 : (precioVenta > 0 ? 100 : 0);
 
-          return { ...p, costoUnitario, gananciaUnitaria, margen };
+          return { ...p, costoUnitario, precioVenta, gananciaUnitaria, margen };
         }).sort((a, b) => b.gananciaUnitaria - a.gananciaUnitaria);
 
         setProfitStats(stats);
       }
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      console.error("Error fetching profitability:", err);
+      alert("Error al calcular la rentabilidad: " + err.message);
     } finally {
       setLoadingProfit(false);
     }
@@ -104,7 +108,7 @@ const SuperAdmin: React.FC = () => {
                        <tr className="bg-white text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-50">
                           <th className="px-8 py-5">Producto</th>
                           <th className="px-8 py-5 text-center">Costo Unit. (Último)</th>
-                          <th className="px-8 py-5 text-center">PVP Venta</th>
+                          <th className="px-8 py-5 text-center">PVP Venta (Calculado)</th>
                           <th className="px-8 py-5 text-center">Ganancia Neta</th>
                           <th className="px-8 py-5 text-center">Margen</th>
                        </tr>
@@ -117,7 +121,7 @@ const SuperAdmin: React.FC = () => {
                               <p className="text-[9px] text-slate-400 font-bold uppercase">{p.laboratorio}</p>
                            </td>
                            <td className="px-8 py-5 text-center font-mono text-xs text-rose-500 font-bold">${p.costoUnitario.toLocaleString(undefined, {minimumFractionDigits: 0})}</td>
-                           <td className="px-8 py-5 text-center font-mono text-xs text-slate-600 font-bold">${(p.precio_unidad || 0).toLocaleString()}</td>
+                           <td className="px-8 py-5 text-center font-mono text-xs text-slate-600 font-bold">${(p.precioVenta || 0).toLocaleString(undefined, {minimumFractionDigits: 0})}</td>
                            <td className="px-8 py-5 text-center"><span className={`text-sm font-black ${p.gananciaUnitaria > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>${p.gananciaUnitaria.toLocaleString(undefined, {minimumFractionDigits: 0})}</span></td>
                            <td className="px-8 py-5 text-center">
                               <div className="flex items-center justify-center gap-2">

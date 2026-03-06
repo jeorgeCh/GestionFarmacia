@@ -49,18 +49,44 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
   };
 
   useEffect(() => {
+    const fetchLastIncomeData = async () => {
+      if (selectedProduct) {
+        const { data: lastIncome, error } = await supabase
+          .from('ingresos')
+          .select('lote, fecha_vencimiento')
+          .eq('producto_id', selectedProduct.id)
+          .order('fecha', { ascending: false })
+          .limit(1)
+          .single();
+
+        if (error && error.code !== 'PGRST116') { // PGRST116: single row not found
+          console.error("Error fetching last income:", error);
+        }
+        
+        const expirationDate = lastIncome?.fecha_vencimiento ? lastIncome.fecha_vencimiento.split('T')[0] : '';
+
+        setFormData({
+          proveedor_id: '',
+          codigo_barras: selectedProduct.codigo_barras || '',
+          cantidad_cajas: 1,
+          unidades_por_caja: selectedProduct.unidades_por_caja || 1,
+          costo_total_compra: 0,
+          lote: lastIncome?.lote || '',
+          fecha_vencimiento: expirationDate,
+        });
+      }
+    };
+
     if (selectedProduct) {
-      setFormData(prev => ({
-        ...prev,
-        codigo_barras: selectedProduct.codigo_barras || '',
-        unidades_por_caja: selectedProduct.unidades_por_caja || 1,
-      }));
+      fetchLastIncomeData();
     }
   }, [selectedProduct]);
 
   const totalUnidadesEntrantes = formData.cantidad_cajas * formData.unidades_por_caja;
-  const costoUnitarioCompra = totalUnidadesEntrantes > 0 
-    ? (formData.costo_total_compra / totalUnidadesEntrantes) 
+  const costoUnitarioCompra = (formData.unidades_por_caja > 0 && formData.costo_total_compra > 0)
+    ? totalUnidadesEntrantes > 0
+      ? formData.costo_total_compra / totalUnidadesEntrantes
+      : formData.costo_total_compra / formData.unidades_por_caja
     : 0;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -80,15 +106,23 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
         fecha_vencimiento: formData.fecha_vencimiento || null
       });
 
-      await supabase.from('productos').update({
+      const productUpdate: Partial<Producto> = {
         codigo_barras: formData.codigo_barras.trim(),
-        fecha_vencimiento: formData.fecha_vencimiento || selectedProduct.fecha_vencimiento,
-      }).eq('id', selectedProduct.id);
+        unidades_por_caja: formData.unidades_por_caja
+      };
 
-      await supabase.rpc('deduct_stock', { 
-        p_id: selectedProduct.id, 
-        p_qty: -totalUnidadesEntrantes 
-      });
+      if(formData.fecha_vencimiento) {
+        productUpdate.fecha_vencimiento = formData.fecha_vencimiento;
+      }
+
+      await supabase.from('productos').update(productUpdate).eq('id', selectedProduct.id);
+
+      if (totalUnidadesEntrantes !== 0) {
+        await supabase.rpc('deduct_stock', { 
+          p_id: selectedProduct.id, 
+          p_qty: -totalUnidadesEntrantes 
+        });
+      }
 
       await supabase.from('audit_logs').insert({
           usuario_id: user.id,
@@ -202,7 +236,7 @@ const Income: React.FC<IncomeProps> = ({ user }) => {
                  <div className="p-8 bg-indigo-50/40 rounded-[3rem] border border-indigo-100 space-y-6 md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-8">
                     <div className="space-y-2">
                       <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Cantidad de Cajas *</label>
-                      <input type="number" required min="1" className="w-full px-6 py-5 bg-white border-2 border-slate-200 rounded-2xl font-black text-2xl outline-none focus:border-indigo-600 shadow-sm" value={formData.cantidad_cajas} onChange={e => setFormData({...formData, cantidad_cajas: Number(e.target.value)})} />
+                      <input type="number" required min="0" className="w-full px-6 py-5 bg-white border-2 border-slate-200 rounded-2xl font-black text-2xl outline-none focus:border-indigo-600 shadow-sm" value={formData.cantidad_cajas} onChange={e => setFormData({...formData, cantidad_cajas: Number(e.target.value)})} />
                     </div>
 
                     <div className="space-y-2">
