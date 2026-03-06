@@ -47,6 +47,7 @@ const StockReport: React.FC<StockReportProps> = ({ products, onClose }) => {
         headStyles: { fillColor: [23, 37, 84], textColor: 255, fontStyle: 'bold' },
         alternateRowStyles: { fillColor: [241, 245, 255] },
         didDrawPage: (data) => {
+          // @ts-ignore
           const pageCount = doc.internal.getNumberOfPages();
           doc.setFontSize(10);
           doc.text(`Página ${data.pageNumber} de ${pageCount}`, data.settings.margin.left, doc.internal.pageSize.height - 10);
