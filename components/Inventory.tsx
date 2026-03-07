@@ -448,14 +448,14 @@ const Inventory: React.FC<InventoryProps> = ({ user, setView }) => {
                         onClick={() => setManagementMode('simple')}
                         className={`flex-1 py-4 rounded-[1.5rem] font-black text-[10px] uppercase tracking-widest transition-all ${managementMode === 'simple' ? 'bg-indigo-600 text-white shadow-xl' : 'text-slate-400 hover:bg-slate-50'}`}
                        >
-                         Solo Individual
+                         individual
                        </button>
                        <button 
                         type="button" 
                         onClick={() => setManagementMode('box')}
                         className={`flex-1 py-4 rounded-[1.5rem] font-black text-[10px] uppercase tracking-widest transition-all ${managementMode === 'box' ? 'bg-slate-900 text-white shadow-xl' : 'text-slate-400 hover:bg-slate-50'}`}
                        >
-                         Caja + Individual
+                         caja/ minima presentacion
                        </button>
                     </div>
                   </div>
